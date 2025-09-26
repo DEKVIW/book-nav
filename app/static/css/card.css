@@ -25,12 +25,12 @@
   display: flex;
 }
 
-/* 有背景时增加卡片不透明度和模糊效果 */
+/* 有背景时增加卡片不透明度 */
 body:not(.bg-none) .site-card {
   background-color: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 /* 修改卡片悬停效果，增加厚重感 */

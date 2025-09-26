@@ -786,18 +786,26 @@
 
         // 统一的错误处理函数
         function handleImageError(img) {
-          const siteName = img.alt || "site";
-          const firstLetter = siteName.charAt(0).toUpperCase();
           const parentEl = img.parentElement;
 
           // 移除错误的图片
           img.remove();
 
-          // 创建默认图标
-          const defaultIcon = document.createElement("div");
-          defaultIcon.className = "default-site-icon";
-          defaultIcon.textContent = firstLetter;
-          parentEl.appendChild(defaultIcon);
+          // 检查是否已经存在隐藏的默认图标
+          const existingDefaultIcon =
+            parentEl.querySelector(".default-site-icon");
+          if (existingDefaultIcon) {
+            // 如果存在，直接显示它
+            existingDefaultIcon.style.display = "flex";
+          } else {
+            // 如果不存在，创建新的默认图标
+            const siteName = img.alt || "site";
+            const firstLetter = siteName.charAt(0).toUpperCase();
+            const defaultIcon = document.createElement("div");
+            defaultIcon.className = "default-site-icon";
+            defaultIcon.textContent = firstLetter;
+            parentEl.appendChild(defaultIcon);
+          }
         }
 
         // 验证图片是否有效 - 更智能的验证

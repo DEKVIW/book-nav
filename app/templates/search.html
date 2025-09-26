@@ -129,7 +129,14 @@
       <a href="{{ url_for('main.site', id=website.id) }}" class="website-card">
         {% if website.icon %}
         <div class="website-icon">
-          <img src="{{ website.icon }}" alt="{{ website.title }}" />
+          <img
+            src="{{ website.icon }}"
+            alt="{{ website.title }}"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+          />
+          <div class="default-site-icon" style="display: none">
+            {{ website.title|first|upper }}
+          </div>
         </div>
         {% else %}
         <div class="website-icon">

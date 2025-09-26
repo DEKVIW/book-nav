@@ -180,8 +180,6 @@ body:not(.bg-none) .category-heading {
   border-radius: 8px;
   border: none;
   box-shadow: none;
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
   margin: 0 auto;
   font-size: 1.2rem;
   font-weight: 600;
@@ -221,7 +219,7 @@ body:not(.bg-none) .subcategory-tag {
   box-shadow: 0 2px 8px rgba(112, 73, 240, 0.07);
   transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
   padding: 0.32rem 1.1rem;
-  border-radius: 1.3rem;
+  border-radius: 0.2rem;
   font-size: 1rem;
 }
 body:not(.bg-none) .subcategory-tag:hover {

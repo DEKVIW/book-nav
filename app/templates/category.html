@@ -538,12 +538,14 @@ DEBUG - Settings信息:
         <div class="site-header">
           <div class="site-icon">
             {% if website.icon %}
-            <img src="{{ website.icon }}" alt="{{ website.title }}" />
+            <img src="{{ website.icon }}" alt="{{ website.title }}" 
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div class="default-site-icon" style="display:none;">
+              {{ website.title|first|upper }}
+            </div>
             {% else %}
             <div class="default-site-icon">
-              <script>
-                document.write("{{ website.title }}".charAt(0).toUpperCase());
-              </script>
+              {{ website.title|first|upper }}
             </div>
             {% endif %}
           </div>
@@ -998,7 +1000,11 @@ DEBUG - Settings信息:
       const siteIcon = document.createElement("div");
       siteIcon.className = "site-icon";
       if (website.icon) {
-        siteIcon.innerHTML = `<img src="${website.icon}" alt="${website.title}" />`;
+        siteIcon.innerHTML = `
+          <img src="${website.icon}" alt="${website.title}" 
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+          <div class="default-site-icon" style="display: none;">${website.title.charAt(0).toUpperCase()}</div>
+        `;
       } else {
         const defaultIcon = document.createElement("div");
         defaultIcon.className = "default-site-icon";
