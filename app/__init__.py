@@ -1,7 +1,6 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
-from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
 from config import Config
 import datetime
@@ -13,7 +12,6 @@ import sqlite3
 sqlite3.threadsafety = 3  # 设置为最高等级的线程安全
 
 db = SQLAlchemy()
-migrate = Migrate()
 login_manager = LoginManager()
 csrf = CSRFProtect()
 login_manager.login_view = 'auth.login'
@@ -36,7 +34,6 @@ def create_app(config_class=Config):
     )
 
     db.init_app(app)
-    migrate.init_app(app, db)
     login_manager.init_app(app)
     csrf.init_app(app)
     
@@ -75,7 +72,14 @@ def create_app(config_class=Config):
                 'site_subtitle': '',
                 'site_keywords': '',
                 'site_description': '',
-                'footer_content': None
+                'footer_content': None,
+                # AI搜索配置默认值
+                'ai_search_enabled': False,
+                'ai_api_base_url': None,
+                'ai_api_key': None,
+                'ai_model_name': None,
+                'ai_temperature': 0.7,
+                'ai_max_tokens': 500
             })
             return {'settings': default_settings}
     

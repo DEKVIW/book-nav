@@ -3,6 +3,7 @@ from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, BooleanField, SubmitField, SelectField, HiddenField, IntegerField, PasswordField, DateTimeField
 from wtforms.validators import DataRequired, Length, URL, Optional, ValidationError, Email, EqualTo, NumberRange
 from app.models import Category, User
+import re
 
 class CategoryForm(FlaskForm):
     name = StringField('分类名称', validators=[DataRequired(), Length(max=64)])
@@ -44,6 +45,27 @@ class WebsiteForm(FlaskForm):
 class InvitationForm(FlaskForm):
     count = IntegerField('生成数量', default=1, validators=[DataRequired()])
     submit_btn = SubmitField('生成邀请码')
+
+def validate_qdrant_url(form, field):
+    """自定义 Qdrant URL 验证器，允许末尾斜杠"""
+    if field.data:
+        url = field.data.strip()
+        # 去除末尾斜杠
+        url = url.rstrip('/')
+        # 验证 URL 格式（允许 http:// 或 https://）
+        url_pattern = re.compile(
+            r'^https?://'  # http:// 或 https://
+            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # 域名
+            r'localhost|'  # localhost
+            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP 地址
+            r'(?::\d+)?'  # 可选端口
+            r'(?:/?|[/?]\S+)$', re.IGNORECASE)  # 路径（可选）
+        
+        if not url_pattern.match(url):
+            raise ValidationError('请输入有效的 URL（例如: http://localhost:6333）')
+        
+        # 更新字段值为去除斜杠后的值
+        field.data = url
 
 class UserEditForm(FlaskForm):
     username = StringField('用户名', validators=[DataRequired(), Length(min=2, max=64)])
@@ -132,6 +154,21 @@ class SiteSettingsForm(FlaskForm):
     announcement_start = DateTimeField('开始时间', validators=[Optional()], format='%Y-%m-%dT%H:%M')
     announcement_end = DateTimeField('结束时间', validators=[Optional()], format='%Y-%m-%dT%H:%M')
     announcement_remember_days = IntegerField('不再提示天数', validators=[Optional(), NumberRange(min=1, max=365)], default=7)
+    
+    # AI 搜索设置
+    ai_search_enabled = BooleanField('启用AI智能搜索')
+    ai_api_base_url = StringField('API基础URL', validators=[Optional(), URL(), Length(max=512)], description='例如: https://api.openai.com')
+    ai_api_key = PasswordField('API密钥', validators=[Optional(), Length(max=256)], description='留空则不修改现有密钥')
+    ai_model_name = StringField('模型名称', validators=[Optional(), Length(max=128)], default='gpt-3.5-turbo', description='例如: gpt-3.5-turbo, gpt-4, claude-3-sonnet')
+    ai_temperature = StringField('温度参数', validators=[Optional()], default='0.7', description='0-1之间，控制随机性，默认0.7')
+    ai_max_tokens = IntegerField('最大Token数', validators=[Optional(), NumberRange(min=100, max=2000)], default=500)
+    
+    # 向量搜索设置（基于 Qdrant）
+    vector_search_enabled = BooleanField('启用向量搜索', description='启用后使用 Qdrant 向量数据库进行高性能语义搜索')
+    qdrant_url = StringField('Qdrant 地址', validators=[Optional(), validate_qdrant_url, Length(max=512)], default='http://localhost:6333', description='Qdrant 向量数据库服务地址')
+    embedding_model = StringField('Embedding 模型', validators=[Optional(), Length(max=128)], default='text-embedding-3-small', description='用于生成向量的模型名称。常见模型：text-embedding-3-small, text-embedding-ada-002, bge-large-zh-v1.5 等。请根据你的 API 服务支持的模型填写。')
+    vector_similarity_threshold = StringField('相似度阈值', validators=[Optional()], default='0.3', description='0-1之间，值越小结果越多，默认0.3')
+    vector_max_results = IntegerField('最大结果数', validators=[Optional(), NumberRange(min=10, max=200)], default=50, description='向量搜索返回的最大结果数')
     
     submit_btn = SubmitField('保存设置')
 

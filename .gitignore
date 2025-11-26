@@ -43,6 +43,10 @@ flask_session/
 *.sqlite
 *.sqlite3
 
+# Qdrant data
+data/qdrant/
+qdrant_storage/
+
 # Logs
 *.log
 logs/
@@ -80,3 +84,6 @@ coverage.xml
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Reference projects (excluded from git)
+PixelPunk/

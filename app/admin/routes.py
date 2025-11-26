@@ -8,7 +8,7 @@ from app import db, csrf
 from app.admin import bp
 from app.admin.forms import CategoryForm, WebsiteForm, InvitationForm, UserEditForm, SiteSettingsForm, DataImportForm, BackgroundForm
 from app.models import Category, Website, InvitationCode, User, SiteSettings, OperationLog, Background, DeadlinkCheck
-from app.main.routes import get_website_icon
+from app.main.utils import get_website_icon
 import time
 import json
 import threading
@@ -28,6 +28,70 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import io
 import queue
+
+
+def _trigger_vector_indexing(website_id: int, category_name: str = None):
+    """
+    异步触发向量生成（后台线程执行，不阻塞主流程）
+    
+    Args:
+        website_id: 网站ID
+        category_name: 分类名称（如果为None，会从数据库查询）
+    """
+    def _generate_vector_in_background():
+        try:
+            # 在后台线程中创建新的应用上下文
+            with current_app.app_context():
+                settings = SiteSettings.get_settings()
+                
+                # 检查向量搜索是否启用
+                if not (settings and settings.vector_search_enabled and 
+                        all([settings.qdrant_url, settings.embedding_model, 
+                             settings.ai_api_base_url, settings.ai_api_key])):
+                    return
+                
+                # 获取网站信息
+                website = Website.query.get(website_id)
+                if not website:
+                    return
+                
+                # 如果没有提供分类名称，从数据库查询
+                if category_name is None and website.category_id:
+                    category = Category.query.get(website.category_id)
+                    cat_name = category.name if category else ""
+                else:
+                    cat_name = category_name or ""
+                
+                # 初始化向量服务
+                from app.utils.vector_service import EmbeddingClient, QdrantVectorStore, VectorSearchService
+                
+                embedding_client = EmbeddingClient(
+                    api_base_url=settings.ai_api_base_url,
+                    api_key=settings.ai_api_key,
+                    model_name=settings.embedding_model or 'text-embedding-3-small'
+                )
+                vector_store = QdrantVectorStore(
+                    qdrant_url=settings.qdrant_url,
+                    vector_dimension=embedding_client.dimension
+                )
+                vector_service = VectorSearchService(embedding_client, vector_store)
+                
+                # 生成向量
+                vector_service.index_website(
+                    website_id=website.id,
+                    title=website.title or "",
+                    description=website.description or "",
+                    category_name=cat_name,
+                    url=website.url or ""
+                )
+                
+                current_app.logger.info(f"网站 {website_id} 向量生成成功")
+        except Exception as e:
+            current_app.logger.error(f"后台向量生成失败 (website_id={website_id}): {str(e)}")
+    
+    # 在后台线程中执行，不阻塞主流程
+    thread = threading.Thread(target=_generate_vector_in_background, daemon=True)
+    thread.start()
 
 def admin_required(f):
     @wraps(f)
@@ -292,6 +356,12 @@ def add_website():
             # 记录日志失败不影响主功能
             current_app.logger.error(f"记录添加操作日志失败: {str(e)}")
         
+        # 异步生成向量（如果向量搜索已启用）
+        try:
+            _trigger_vector_indexing(website.id, category_name)
+        except Exception as e:
+            current_app.logger.warning(f"触发向量生成失败: {str(e)}")
+        
         flash('网站添加成功', 'success')
         return redirect(url_for('admin.websites'))
     return render_template('admin/website_form.html', title='添加网站', form=form)
@@ -370,6 +440,20 @@ def edit_website(id):
                 db.session.commit()
             except Exception as e:
                 current_app.logger.error(f"记录修改操作日志失败: {str(e)}")
+        
+        # 检查是否需要更新向量（标题、描述或分类变化时）
+        needs_vector_update = (
+            old_title != website.title or
+            old_description != website.description or
+            old_category_id != website.category_id
+        )
+        
+        if needs_vector_update:
+            try:
+                new_category_name = website.category.name if website.category else None
+                _trigger_vector_indexing(website.id, new_category_name)
+            except Exception as e:
+                current_app.logger.warning(f"触发向量更新失败: {str(e)}")
         
         flash('网站更新成功', 'success')
         return redirect(url_for('admin.websites'))
@@ -639,6 +723,22 @@ def site_settings():
         settings = SiteSettings.get_settings()
         form = SiteSettingsForm(obj=settings)
         
+        # 如果已配置API密钥，在表单中显示掩码（GET请求时）
+        if request.method == 'GET' and settings.ai_api_key:
+            # 显示前4位和后4位，中间用*代替
+            if len(settings.ai_api_key) > 8:
+                masked_key = settings.ai_api_key[:4] + '*' * (len(settings.ai_api_key) - 8) + settings.ai_api_key[-4:]
+            else:
+                masked_key = '*' * len(settings.ai_api_key)
+            # 设置表单字段的值
+            form.ai_api_key.data = masked_key
+            # 同时设置对象的原始值，确保表单能正确显示
+            form.ai_api_key.raw_data = [masked_key]
+        
+        # 如果Qdrant URL为空，自动填充默认值（根据Docker环境）
+        if request.method == 'GET' and not settings.qdrant_url:
+            form.qdrant_url.data = SiteSettings.get_default_qdrant_url()
+        
         # 输出初始设置值
         current_app.logger.info(f"初始设置: enable_transition={settings.enable_transition}, theme={settings.transition_theme}")
         
@@ -722,6 +822,53 @@ def site_settings():
             settings.announcement_start = form.announcement_start.data
             settings.announcement_end = form.announcement_end.data
             settings.announcement_remember_days = form.announcement_remember_days.data
+            
+            # 更新AI搜索设置
+            settings.ai_search_enabled = form.ai_search_enabled.data
+            settings.ai_api_base_url = form.ai_api_base_url.data
+            # 只有提供了新密钥才更新（留空则不修改，如果输入的是掩码则保持原值）
+            api_key_input = form.ai_api_key.data.strip() if form.ai_api_key.data else ""
+            # 判断是否为掩码：包含*号且长度较短（掩码通常是前4位+*号+后4位，或全是*号）
+            is_masked = api_key_input and ('*' in api_key_input or (len(api_key_input) < 20 and api_key_input.count('*') > 0))
+            if api_key_input and not is_masked:
+                settings.ai_api_key = api_key_input
+            settings.ai_model_name = form.ai_model_name.data
+            try:
+                settings.ai_temperature = float(form.ai_temperature.data) if form.ai_temperature.data else 0.7
+            except (ValueError, TypeError):
+                settings.ai_temperature = 0.7
+            settings.ai_max_tokens = form.ai_max_tokens.data if form.ai_max_tokens.data else 500
+            
+            # 更新向量搜索设置
+            settings.vector_search_enabled = form.vector_search_enabled.data
+            # 去除 Qdrant URL 末尾的斜杠（如果存在）
+            if form.qdrant_url.data:
+                qdrant_url = form.qdrant_url.data.strip().rstrip('/')
+            else:
+                # 如果未填写，使用默认值（自动检测Docker环境）
+                qdrant_url = SiteSettings.get_default_qdrant_url()
+            settings.qdrant_url = qdrant_url
+            settings.embedding_model = form.embedding_model.data if form.embedding_model.data else 'text-embedding-3-small'
+            try:
+                settings.vector_similarity_threshold = float(form.vector_similarity_threshold.data) if form.vector_similarity_threshold.data else 0.3
+            except (ValueError, TypeError):
+                settings.vector_similarity_threshold = 0.3
+            settings.vector_max_results = form.vector_max_results.data if form.vector_max_results.data else 50
+            
+            # 检查AI配置是否完整
+            ai_configured = all([
+                settings.ai_api_base_url,
+                settings.ai_api_key,
+                settings.ai_model_name
+            ])
+            
+            # 检查向量搜索配置是否完整
+            vector_configured = all([
+                settings.vector_search_enabled,
+                settings.qdrant_url,
+                settings.ai_api_base_url,
+                settings.ai_api_key
+            ])
 
             # 确认设置值已更新
             current_app.logger.info(f"更新后的设置: enable_transition={settings.enable_transition}, theme={settings.transition_theme}")
@@ -732,7 +879,15 @@ def site_settings():
                 db.session.refresh(settings)
                 current_app.logger.info(f"保存后的设置: enable_transition={settings.enable_transition}, theme={settings.transition_theme}")
                 
-                flash('站点设置已更新', 'success')
+                # 根据配置状态显示不同的提示
+                if vector_configured:
+                    flash('站点设置已更新，向量搜索已配置完成', 'success')
+                elif ai_configured and settings.ai_search_enabled:
+                    flash('站点设置已更新，AI搜索已配置并启用', 'success')
+                elif ai_configured:
+                    flash('站点设置已更新，AI搜索已配置（未启用）', 'success')
+                else:
+                    flash('站点设置已更新', 'success')
                 return redirect(url_for('admin.site_settings'))
             except Exception as e:
                 db.session.rollback()
@@ -744,6 +899,66 @@ def site_settings():
         flash(f'加载站点设置失败: {str(e)}', 'danger')
         current_app.logger.error(f"加载站点设置失败: {str(e)}")
         return redirect(url_for('admin.index'))
+
+
+@bp.route('/api/test-ai-config', methods=['POST'])
+@login_required
+@superadmin_required
+def test_ai_config():
+    """测试AI配置是否有效"""
+    from app.utils.ai_search import AISearchService
+    from app.models import SiteSettings
+    
+    try:
+        data = request.get_json()
+        api_base_url = data.get('api_base_url', '').strip()
+        api_key_input = data.get('api_key', '').strip()
+        model_name = data.get('model_name', '').strip()
+        
+        # 获取数据库中的真实配置
+        settings = SiteSettings.get_settings()
+        
+        # 如果输入框为空或包含*号（掩码），使用数据库中的真实key
+        if not api_key_input or '*' in api_key_input:
+            api_key = settings.ai_api_key or ''
+        else:
+            # 如果输入了新key，使用输入的key
+            api_key = api_key_input
+        
+        # 如果URL或模型名为空，使用数据库中的值
+        if not api_base_url:
+            api_base_url = settings.ai_api_base_url or ''
+        if not model_name:
+            model_name = settings.ai_model_name or ''
+        
+        if not all([api_base_url, api_key, model_name]):
+            return jsonify({
+                'success': False,
+                'message': '请填写完整的API配置信息，或确保已保存配置'
+            }), 400
+        
+        # 创建AI服务并测试
+        ai_service = AISearchService(
+            api_base_url=api_base_url,
+            api_key=api_key,
+            model_name=model_name
+        )
+        
+        # 执行简单的测试查询
+        test_result = ai_service.analyze_search_intent("测试")
+        
+        return jsonify({
+            'success': True,
+            'message': 'AI配置测试成功！',
+            'result': test_result
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"AI配置测试失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'测试失败: {str(e)}'
+        }), 400
 
 def save_image(file_data, subfolder):
     """保存上传的图片到static/uploads目录"""
@@ -1578,7 +1793,7 @@ def format_file_size(size_bytes):
         return f"{size_bytes / (1024 * 1024 * 1024):.1f}GB"
 
 # 批量抓取缺失图标相关功能
-from app.main.routes import get_website_icon
+from app.main.utils import get_website_icon
 import time
 import json
 import threading

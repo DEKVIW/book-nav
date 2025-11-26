@@ -483,10 +483,10 @@
 
         // 智能加载配置
         const loadConfig = {
-          initialTimeout: 5000, // 初始超时5秒
-          retryTimeout: 3000, // 重试超时3秒
-          maxRetries: 2, // 最大重试次数
-          slowNetworkThreshold: 8000, // 慢网络阈值8秒
+          initialTimeout: 3000, // 初始超时3秒
+          retryTimeout: 2000, // 重试超时2秒
+          maxRetries: 1, // 最大重试次数
+          slowNetworkThreshold: 5000, // 慢网络阈值5秒
           progressiveTimeout: true, // 启用渐进式超时
         };
 
@@ -645,15 +645,8 @@
             return; // 已缓存，直接使用
           }
 
-          // 检查失败记录
+          // 检查失败记录 - 如果之前失败过，直接显示默认图标
           if (failedIcons.has(url)) {
-            // 如果之前失败过，但图片现在显示正常，则移除失败记录
-            if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-              failedIcons.delete(url);
-              loadedIcons.add(url);
-              saveIconCache();
-              return;
-            }
             handleImageError(img);
             return;
           }

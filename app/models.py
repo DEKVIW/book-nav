@@ -170,6 +170,23 @@ class Website(db.Model):
         return False 
 
 
+class WebsiteVector(db.Model):
+    """网站向量元数据表"""
+    id = db.Column(db.Integer, primary_key=True)
+    website_id = db.Column(db.Integer, db.ForeignKey('website.id'), unique=True, nullable=False)
+    vector_status = db.Column(db.String(20), default='pending')  # pending, completed, failed
+    embedding_model = db.Column(db.String(128), default='text-embedding-3-small')
+    dimension = db.Column(db.Integer, default=1536)  # 向量维度
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 关联关系
+    website = db.relationship('Website', backref='vector_info', uselist=False)
+    
+    def __repr__(self):
+        return f'<WebsiteVector {self.website_id} - {self.vector_status}>'
+
+
 class SiteSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     site_name = db.Column(db.String(128), default="炫酷导航")
@@ -212,6 +229,54 @@ class SiteSettings(db.Model):
     announcement_start = db.Column(db.DateTime, nullable=True)  # 公告开始时间
     announcement_end = db.Column(db.DateTime, nullable=True)  # 公告结束时间
     announcement_remember_days = db.Column(db.Integer, default=7)  # 不再提示的天数
+    
+    # AI 搜索设置
+    ai_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用AI搜索功能
+    ai_api_base_url = db.Column(db.String(512), nullable=True)  # AI API基础URL
+    ai_api_key = db.Column(db.String(512), nullable=True)  # AI API密钥（加密存储）
+    ai_model_name = db.Column(db.String(128), nullable=True)  # AI模型名称
+    ai_temperature = db.Column(db.Float, default=0.7)  # AI温度参数
+    ai_max_tokens = db.Column(db.Integer, default=500)  # AI最大token数
+    
+    # 向量搜索设置（基于 Qdrant）
+    vector_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用向量搜索
+    qdrant_url = db.Column(db.String(512), default='http://localhost:6333')  # Qdrant 服务地址
+    embedding_model = db.Column(db.String(128), default='text-embedding-3-small')  # Embedding 模型
+    vector_similarity_threshold = db.Column(db.Float, default=0.3)  # 向量相似度阈值
+    vector_max_results = db.Column(db.Integer, default=50)  # 向量搜索最大结果数
+    
+    @staticmethod
+    def get_default_qdrant_url():
+        """
+        获取默认Qdrant URL（自动检测Docker环境）
+        
+        Docker环境中，nav容器访问qdrant容器应使用服务名'qdrant'
+        本地开发环境使用'localhost'
+        """
+        import os
+        # 检测是否在Docker容器中运行
+        # 方法1: 检查是否存在 /.dockerenv 文件（Docker标准检测方法）
+        # 方法2: 检查环境变量 DOCKER_CONTAINER
+        # 方法3: 检查 /proc/self/cgroup 是否包含docker
+        is_docker = False
+        try:
+            if os.path.exists('/.dockerenv'):
+                is_docker = True
+            elif os.environ.get('DOCKER_CONTAINER') == 'true':
+                is_docker = True
+            elif os.path.exists('/proc/self/cgroup'):
+                with open('/proc/self/cgroup', 'r') as f:
+                    if 'docker' in f.read():
+                        is_docker = True
+        except Exception:
+            pass  # 如果检测失败，默认使用localhost
+        
+        if is_docker:
+            # Docker环境中，使用服务名访问（docker-compose.yml中定义的服务名）
+            return 'http://qdrant:6333'
+        else:
+            # 本地开发环境
+            return 'http://localhost:6333'
     
     # 单例模式：确保只有一条记录
     @classmethod

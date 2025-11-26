@@ -140,6 +140,21 @@ head %}
             placeholder="请输入关键字搜索网站"
             autocomplete="off"
           />
+          {% if settings and settings.ai_search_enabled and
+          settings.ai_api_base_url and settings.ai_api_key and
+          settings.ai_model_name %}
+          <div class="ai-search-toggle-container" title="启用AI智能搜索">
+            <input
+              type="checkbox"
+              id="aiSearchToggle"
+              class="ai-search-toggle"
+            />
+            <label for="aiSearchToggle" class="ai-search-toggle-label">
+              <i class="bi bi-robot"></i>
+              <span class="ai-search-toggle-text">AI</span>
+            </label>
+          </div>
+          {% endif %}
           <button type="submit" class="main-search-button">
             <i class="bi bi-search"></i>
           </button>
