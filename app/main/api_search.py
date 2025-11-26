@@ -408,7 +408,8 @@ def _progressive_search(query: str, user_id: Optional[int]):
                         vector_websites.sort(key=lambda x: x.get('vector_score', 0), reverse=True)
                         
                         # 分批返回向量搜索结果，实现真正的渐进式加载
-                        batch_size = 15  # 每批返回15条（50条分4批，更快看到结果）
+                        # 使用小批次（3-4条），让用户更快看到结果，减少等待感
+                        batch_size = 3  # 每批返回3条，前端会逐个显示（每个80ms，总共240ms）
                         total_batches = (len(vector_websites) + batch_size - 1) // batch_size
                         
                         # 保存初始的关键词搜索结果
@@ -431,9 +432,11 @@ def _progressive_search(query: str, user_id: Optional[int]):
                             
                             sys.stdout.flush()
                             
-                            # 如果不是最后一批，稍微延迟，让用户看到渐进式效果
+                            # 如果不是最后一批，稍微延迟，让前端有时间逐个显示卡片
+                            # 3条 * 80ms = 240ms，批次间隔设为350ms，确保前端有足够时间显示当前批次
+                            # 这样用户每350ms就能看到新卡片，体验更流畅
                             if batch_idx < total_batches - 1:
-                                time.sleep(0.15)  # 150ms延迟，让用户看到逐步加载
+                                time.sleep(0.35)  # 350ms延迟，让前端有时间逐个显示当前批次的所有卡片
                         
                         # 最终合并所有结果：向量结果在前，关键词结果在后
                         websites_data = vector_websites + initial_keyword_results

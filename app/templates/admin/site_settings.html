@@ -763,15 +763,7 @@
                       ><br />
                       • <strong>本地开发</strong>：<code
                         >http://localhost:6333</code
-                      ><br />
-                      • 系统会自动检测Docker环境并设置默认值<br />
-                      • 访问
-                      <a
-                        href="{{ settings.qdrant_url or 'http://localhost:6333' }}/dashboard"
-                        target="_blank"
-                        >管理界面</a
                       >
-                      验证连接
                     </div>
                   </div>
 
@@ -843,6 +835,117 @@
                       <li>配置 Qdrant 服务地址</li>
                       <li>确保 AI API 配置正确（用于生成向量）</li>
                     </ul>
+                  </div>
+                  {% endif %}
+
+                  <!-- 批量生成向量 -->
+                  {% if settings.vector_search_enabled and settings.qdrant_url
+                  and settings.embedding_model and settings.ai_api_base_url and
+                  settings.ai_api_key %}
+                  <div class="card border-primary mb-3">
+                    <div class="card-header bg-primary text-white">
+                      <i class="bi bi-database-add me-2"></i>批量生成向量索引
+                    </div>
+                    <div class="card-body">
+                      <p class="card-text small mb-3">
+                        为数据库中所有网站生成向量索引，用于向量搜索功能。首次使用或更换模型后需要执行此操作。
+                      </p>
+
+                      <div id="vectorIndexingStatus" style="display: none">
+                        <div class="mb-3">
+                          <div
+                            class="d-flex justify-content-between align-items-center mb-2"
+                          >
+                            <span class="small">生成进度</span>
+                            <span class="small" id="vectorIndexingPercent"
+                              >0%</span
+                            >
+                          </div>
+                          <div class="progress" style="height: 20px">
+                            <div
+                              class="progress-bar progress-bar-striped progress-bar-animated"
+                              role="progressbar"
+                              id="vectorIndexingProgress"
+                              style="width: 0%"
+                            ></div>
+                          </div>
+                        </div>
+                        <div class="row text-center mb-3">
+                          <div class="col-3">
+                            <div class="small text-muted">总数</div>
+                            <div class="fw-bold" id="vectorIndexingTotal">
+                              0
+                            </div>
+                          </div>
+                          <div class="col-3">
+                            <div class="small text-muted">已处理</div>
+                            <div
+                              class="fw-bold text-primary"
+                              id="vectorIndexingProcessed"
+                            >
+                              0
+                            </div>
+                          </div>
+                          <div class="col-3">
+                            <div class="small text-muted">成功</div>
+                            <div
+                              class="fw-bold text-success"
+                              id="vectorIndexingSuccess"
+                            >
+                              0
+                            </div>
+                          </div>
+                          <div class="col-3">
+                            <div class="small text-muted">失败</div>
+                            <div
+                              class="fw-bold text-danger"
+                              id="vectorIndexingFailed"
+                            >
+                              0
+                            </div>
+                          </div>
+                        </div>
+                        <div class="small text-muted mb-2">
+                          <i class="bi bi-clock me-1"></i>已用时间:
+                          <span id="vectorIndexingElapsed">0秒</span>
+                        </div>
+                      </div>
+
+                      <div class="d-flex gap-2">
+                        <button
+                          type="button"
+                          id="startVectorIndexing"
+                          class="btn btn-primary btn-sm"
+                        >
+                          <i class="bi bi-play-circle me-2"></i>开始生成
+                        </button>
+                        <button
+                          type="button"
+                          id="stopVectorIndexing"
+                          class="btn btn-outline-danger btn-sm"
+                          style="display: none"
+                        >
+                          <i class="bi bi-stop-circle me-2"></i>停止
+                        </button>
+                        <div
+                          class="form-check form-switch align-self-center ms-auto"
+                        >
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="skipExistingVectors"
+                            checked
+                          />
+                          <label
+                            class="form-check-label small"
+                            for="skipExistingVectors"
+                          >
+                            跳过已存在的向量
+                          </label>
+                        </div>
+                      </div>
+                      <div id="vectorIndexingMessage" class="mt-2 small"></div>
+                    </div>
                   </div>
                   {% endif %}
                 </div>
@@ -1397,6 +1500,166 @@
       }
       // 初始预览
       syncMobilePreview();
+    }
+
+    // 批量生成向量功能
+    const startVectorIndexingBtn = document.getElementById(
+      "startVectorIndexing"
+    );
+    const stopVectorIndexingBtn = document.getElementById("stopVectorIndexing");
+    const vectorIndexingStatus = document.getElementById(
+      "vectorIndexingStatus"
+    );
+    const vectorIndexingMessage = document.getElementById(
+      "vectorIndexingMessage"
+    );
+    const skipExistingVectors = document.getElementById("skipExistingVectors");
+
+    if (startVectorIndexingBtn) {
+      let statusCheckInterval = null;
+
+      // 开始生成向量
+      startVectorIndexingBtn.addEventListener("click", function () {
+        const skipExisting = skipExistingVectors
+          ? skipExistingVectors.checked
+          : true;
+
+        // 获取CSRF token
+        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        const csrfToken = csrfTokenMeta
+          ? csrfTokenMeta.getAttribute("content")
+          : "";
+
+        fetch("{{ url_for('admin.batch_generate_vectors') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+          },
+          body: JSON.stringify({
+            skip_existing: skipExisting,
+          }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              startVectorIndexingBtn.style.display = "none";
+              stopVectorIndexingBtn.style.display = "inline-block";
+              vectorIndexingStatus.style.display = "block";
+              vectorIndexingMessage.innerHTML =
+                '<div class="alert alert-info mb-0"><i class="bi bi-info-circle me-2"></i>' +
+                data.message +
+                "</div>";
+
+              // 开始轮询状态
+              statusCheckInterval = setInterval(
+                checkVectorIndexingStatus,
+                1000
+              );
+              checkVectorIndexingStatus();
+            } else {
+              vectorIndexingMessage.innerHTML =
+                '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>' +
+                data.message +
+                "</div>";
+            }
+          })
+          .catch((error) => {
+            vectorIndexingMessage.innerHTML =
+              '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>启动失败: ' +
+              error.message +
+              "</div>";
+          });
+      });
+
+      // 停止生成向量
+      if (stopVectorIndexingBtn) {
+        stopVectorIndexingBtn.addEventListener("click", function () {
+          const csrfTokenMeta = document.querySelector(
+            'meta[name="csrf-token"]'
+          );
+          const csrfToken = csrfTokenMeta
+            ? csrfTokenMeta.getAttribute("content")
+            : "";
+
+          fetch("{{ url_for('admin.batch_generate_vectors_stop') }}", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": csrfToken,
+            },
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              vectorIndexingMessage.innerHTML =
+                '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle me-2"></i>' +
+                data.message +
+                "</div>";
+            })
+            .catch((error) => {
+              vectorIndexingMessage.innerHTML =
+                '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>停止失败: ' +
+                error.message +
+                "</div>";
+            });
+        });
+      }
+
+      // 检查生成状态
+      function checkVectorIndexingStatus() {
+        fetch("{{ url_for('admin.batch_generate_vectors_status') }}")
+          .then((response) => response.json())
+          .then((data) => {
+            // 更新进度条
+            const progressBar = document.getElementById(
+              "vectorIndexingProgress"
+            );
+            const percentEl = document.getElementById("vectorIndexingPercent");
+            if (progressBar) {
+              progressBar.style.width = data.percent + "%";
+            }
+            if (percentEl) {
+              percentEl.textContent = data.percent + "%";
+            }
+
+            // 更新统计信息
+            const totalEl = document.getElementById("vectorIndexingTotal");
+            const processedEl = document.getElementById(
+              "vectorIndexingProcessed"
+            );
+            const successEl = document.getElementById("vectorIndexingSuccess");
+            const failedEl = document.getElementById("vectorIndexingFailed");
+            const elapsedEl = document.getElementById("vectorIndexingElapsed");
+
+            if (totalEl) totalEl.textContent = data.total || 0;
+            if (processedEl) processedEl.textContent = data.processed || 0;
+            if (successEl) successEl.textContent = data.success || 0;
+            if (failedEl) failedEl.textContent = data.failed || 0;
+            if (elapsedEl) elapsedEl.textContent = data.elapsed_time || "0秒";
+
+            // 如果任务完成，停止轮询
+            if (!data.is_running) {
+              if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+              }
+
+              startVectorIndexingBtn.style.display = "inline-block";
+              stopVectorIndexingBtn.style.display = "none";
+
+              const skippedText =
+                data.skipped > 0 ? `，跳过: ${data.skipped}` : "";
+              vectorIndexingMessage.innerHTML =
+                '<div class="alert alert-success mb-0">' +
+                '<i class="bi bi-check-circle me-2"></i>' +
+                `生成完成！成功: ${data.success}，失败: ${data.failed}${skippedText}，总计: ${data.total}` +
+                "</div>";
+            }
+          })
+          .catch((error) => {
+            console.error("检查状态失败:", error);
+          });
+      }
     }
   });
 </script>

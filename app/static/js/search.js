@@ -64,7 +64,6 @@ document.addEventListener("DOMContentLoaded", function () {
       eventSource.onmessage = function (event) {
         try {
           hasReceivedData = true;
-          console.log("收到渐进式搜索数据:", event.data);
 
           // EventSource 返回的数据格式是 "data: {...}\n\n"，需要提取 data 部分
           let dataStr = event.data;
@@ -73,7 +72,6 @@ document.addEventListener("DOMContentLoaded", function () {
           }
 
           const data = JSON.parse(dataStr);
-          console.log("解析后的数据:", data);
 
           if (data.stage === "error") {
             eventSource.close();
@@ -115,20 +113,23 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             // 如果之前有结果，检查是否有新增
             else if (hasExistingResults) {
-              const newWebsites = currentWebsites.filter(
-                (site) => !existingIds.has(site.id)
+              // 重新获取已存在的ID（因为DOM可能已经更新）
+              const currentExistingIds = new Set(
+                Array.from(resultsContent.querySelectorAll(".site-card")).map(
+                  (card) => parseInt(card.dataset.id)
+                )
               );
-              
-              // 如果有新网站，增量添加
+
+              const newWebsites = currentWebsites.filter(
+                (site) => !currentExistingIds.has(site.id)
+              );
+
+              // 如果有新网站，增量添加（这是渐进式渲染的核心）
               if (newWebsites.length > 0) {
                 _appendWebsites(newWebsites);
-              } 
-              // 如果没有新网站但总数增加了，说明是分批返回的累积结果
-              // 这种情况下，后端返回的是累积结果（包含已显示的），前端需要重新渲染以更新顺序
-              else if (data.total && data.total > existingIds.size) {
-                // 重新渲染以反映新的排序（向量结果按分数排序）
-                _renderWebsites(currentWebsites);
               }
+              // 如果没有新网站，说明这批是累积结果但所有网站都已显示
+              // 这种情况下不需要做任何操作，保持当前显示状态
             }
           }
           // 如果是最终阶段（AI排序完成）
@@ -136,16 +137,21 @@ document.addEventListener("DOMContentLoaded", function () {
             // 最终阶段：智能更新顺序，不清空重绘
             if (currentWebsites.length > 0) {
               // 检查顺序是否真的改变了
-              const currentIds = Array.from(resultsContent.querySelectorAll(".site-card")).map(
-                (card) => parseInt(card.dataset.id)
-              );
+              const currentIds = Array.from(
+                resultsContent.querySelectorAll(".site-card")
+              ).map((card) => parseInt(card.dataset.id));
               const newIds = currentWebsites.map((site) => site.id);
-              
+
               // 如果顺序相同，只更新状态；如果顺序不同，重新排序渲染
-              if (currentIds.length === newIds.length && currentIds === newIds) {
+              if (
+                currentIds.length === newIds.length &&
+                currentIds === newIds
+              ) {
                 // 顺序没变，只更新状态提示
                 if (searchSummary) {
-                  let summaryText = `找到 <strong>${data.total || 0}</strong> 个与 <span class="search-keyword">"${query}"</span> 相关的网站`;
+                  let summaryText = `找到 <strong>${
+                    data.total || 0
+                  }</strong> 个与 <span class="search-keyword">"${query}"</span> 相关的网站`;
                   if (data.ai_enabled) {
                     summaryText += ` <span class="badge bg-primary ms-2" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
                   }
@@ -195,11 +201,9 @@ document.addEventListener("DOMContentLoaded", function () {
       };
 
       eventSource.onerror = function (event) {
-        console.error("渐进式搜索连接错误:", event);
         eventSource.close();
         // 如果出错且没有收到任何数据，尝试传统搜索
         if (!hasReceivedData) {
-          console.log("回退到传统搜索");
           _traditionalSearch(searchUrl.replace("&progressive=true", ""), query);
         }
       };
@@ -207,13 +211,11 @@ document.addEventListener("DOMContentLoaded", function () {
       // 设置超时，如果5秒内没有收到数据，回退到传统搜索
       setTimeout(function () {
         if (!hasReceivedData && eventSource.readyState !== EventSource.CLOSED) {
-          console.log("渐进式搜索超时，回退到传统搜索");
           eventSource.close();
           _traditionalSearch(searchUrl.replace("&progressive=true", ""), query);
         }
       }, 5000);
     } catch (e) {
-      console.error("创建EventSource失败，使用传统搜索:", e);
       _traditionalSearch(searchUrl.replace("&progressive=true", ""), query);
     }
   }
@@ -351,7 +353,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // 增量添加网站（用于渐进式搜索）
+  // 增量添加网站（用于渐进式搜索）- 逐个添加，实现真正的渐进式效果
   function _appendWebsites(websites) {
     if (!websites || websites.length === 0) {
       return;
@@ -372,81 +374,98 @@ document.addEventListener("DOMContentLoaded", function () {
       )
     );
 
-    // 只添加新网站
-    websites.forEach((site) => {
-      if (existingIds.has(site.id)) {
-        return; // 跳过已存在的网站
-      }
+    // 过滤出真正的新网站
+    const newWebsites = websites.filter((site) => !existingIds.has(site.id));
 
-      // 创建卡片元素（复用_renderWebsites的逻辑）
-      const siteCard = document.createElement("a");
-      siteCard.href = `/site/${site.id}`;
-      siteCard.className = "site-card";
-      siteCard.dataset.id = site.id;
-      siteCard.title = site.description || "";
-      siteCard.dataset.bsToggle = "tooltip";
-      siteCard.dataset.bsPlacement = "bottom";
-      siteCard.target = "_blank";
+    if (newWebsites.length === 0) {
+      return; // 没有新网站，直接返回
+    }
 
-      if (site.is_private) {
-        const privateBadge = document.createElement("div");
-        privateBadge.className = "private-badge";
-        privateBadge.title = "私有链接";
-        privateBadge.innerHTML = '<i class="bi bi-lock-fill"></i>';
-        siteCard.appendChild(privateBadge);
-      }
-
-      const siteHeader = document.createElement("div");
-      siteHeader.className = "site-header";
-
-      const iconContainer = document.createElement("div");
-      iconContainer.className = "site-icon";
-
-      if (site.icon) {
-        const img = document.createElement("img");
-        img.src = site.icon;
-        img.alt = site.title;
-        iconContainer.appendChild(img);
-      } else {
-        const defaultIcon = document.createElement("div");
-        defaultIcon.className = "default-site-icon";
-        defaultIcon.textContent = site.title.charAt(0).toUpperCase();
-        iconContainer.appendChild(defaultIcon);
-      }
-
-      const textContainer = document.createElement("div");
-      textContainer.className = "site-text";
-
-      const titleEl = document.createElement("h5");
-      titleEl.className = "site-title";
-      titleEl.textContent = site.title;
-      textContainer.appendChild(titleEl);
-
-      const descEl = document.createElement("p");
-      descEl.className = "site-description";
-      descEl.textContent = site.description || "";
-      textContainer.appendChild(descEl);
-
-      siteHeader.appendChild(iconContainer);
-      siteHeader.appendChild(textContainer);
-      siteCard.appendChild(siteHeader);
-
-      // 使用动画效果添加新卡片
-      siteCard.style.opacity = "0";
-      siteCard.style.transform = "translateY(10px)";
-      cardContainer.appendChild(siteCard);
-
-      // 触发动画
+    // 逐个添加网站卡片，每个卡片之间有延迟，实现流畅的渐进式效果
+    newWebsites.forEach((site, index) => {
+      // 每个卡片延迟 80ms，形成流畅的渐进式出现效果
       setTimeout(() => {
-        siteCard.style.transition = "opacity 0.3s ease, transform 0.3s ease";
-        siteCard.style.opacity = "1";
-        siteCard.style.transform = "translateY(0)";
-      }, 10);
+        // 再次检查是否已存在（防止重复添加）
+        const currentExistingIds = new Set(
+          Array.from(cardContainer.querySelectorAll(".site-card")).map((card) =>
+            parseInt(card.dataset.id)
+          )
+        );
 
-      // 初始化工具提示
-      if (typeof bootstrap !== "undefined") {
-        new bootstrap.Tooltip(siteCard);
-      }
+        if (currentExistingIds.has(site.id)) {
+          return; // 已存在，跳过
+        }
+
+        // 创建卡片元素
+        const siteCard = document.createElement("a");
+        siteCard.href = `/site/${site.id}`;
+        siteCard.className = "site-card";
+        siteCard.dataset.id = site.id;
+        siteCard.title = site.description || "";
+        siteCard.dataset.bsToggle = "tooltip";
+        siteCard.dataset.bsPlacement = "bottom";
+        siteCard.target = "_blank";
+
+        if (site.is_private) {
+          const privateBadge = document.createElement("div");
+          privateBadge.className = "private-badge";
+          privateBadge.title = "私有链接";
+          privateBadge.innerHTML = '<i class="bi bi-lock-fill"></i>';
+          siteCard.appendChild(privateBadge);
+        }
+
+        const siteHeader = document.createElement("div");
+        siteHeader.className = "site-header";
+
+        const iconContainer = document.createElement("div");
+        iconContainer.className = "site-icon";
+
+        if (site.icon) {
+          const img = document.createElement("img");
+          img.src = site.icon;
+          img.alt = site.title;
+          iconContainer.appendChild(img);
+        } else {
+          const defaultIcon = document.createElement("div");
+          defaultIcon.className = "default-site-icon";
+          defaultIcon.textContent = site.title.charAt(0).toUpperCase();
+          iconContainer.appendChild(defaultIcon);
+        }
+
+        const textContainer = document.createElement("div");
+        textContainer.className = "site-text";
+
+        const titleEl = document.createElement("h5");
+        titleEl.className = "site-title";
+        titleEl.textContent = site.title;
+        textContainer.appendChild(titleEl);
+
+        const descEl = document.createElement("p");
+        descEl.className = "site-description";
+        descEl.textContent = site.description || "";
+        textContainer.appendChild(descEl);
+
+        siteHeader.appendChild(iconContainer);
+        siteHeader.appendChild(textContainer);
+        siteCard.appendChild(siteHeader);
+
+        // 使用动画效果添加新卡片
+        siteCard.style.opacity = "0";
+        siteCard.style.transform = "translateY(10px)";
+        cardContainer.appendChild(siteCard);
+
+        // 触发淡入和上移动画
+        setTimeout(() => {
+          siteCard.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+          siteCard.style.opacity = "1";
+          siteCard.style.transform = "translateY(0)";
+        }, 10);
+
+        // 初始化工具提示
+        if (typeof bootstrap !== "undefined") {
+          new bootstrap.Tooltip(siteCard);
+        }
+      }, index * 80); // 每个卡片延迟 80ms，形成流畅的渐进式效果
     });
   }
 
