@@ -232,6 +232,7 @@ class SiteSettings(db.Model):
     
     # AI 搜索设置
     ai_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用AI搜索功能
+    ai_search_allow_anonymous = db.Column(db.Boolean, default=False)  # 是否允许非登录用户使用AI搜索
     ai_api_base_url = db.Column(db.String(512), nullable=True)  # AI API基础URL
     ai_api_key = db.Column(db.String(512), nullable=True)  # AI API密钥（加密存储）
     ai_model_name = db.Column(db.String(128), nullable=True)  # AI模型名称

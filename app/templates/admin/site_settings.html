@@ -609,6 +609,33 @@
                     </div>
                   </div>
 
+                  <!-- 允许非登录用户使用AI搜索 -->
+                  <div class="mb-3">
+                    <div
+                      class="d-flex justify-content-between align-items-center mb-2"
+                    >
+                      <label class="form-label fw-bold mb-0"
+                        >允许非登录用户使用AI搜索</label
+                      >
+                      <div class="form-check form-switch">
+                        {{
+                        form.ai_search_allow_anonymous(class="form-check-input",
+                        id="ai_search_allow_anonymous") }}
+                        <label
+                          class="form-check-label"
+                          for="ai_search_allow_anonymous"
+                        >
+                          {% if settings.ai_search_allow_anonymous %}已允许{%
+                          else %}已禁止{% endif %}
+                        </label>
+                      </div>
+                    </div>
+                    <div class="form-text">
+                      <i class="bi bi-info-circle me-1"></i>
+                      开启后，未登录用户也可以使用AI搜索功能。关闭则仅允许登录用户使用。
+                    </div>
+                  </div>
+
                   <!-- API基础URL -->
                   <div class="mb-3">
                     <label class="form-label fw-bold">API基础URL</label>
@@ -1662,5 +1689,31 @@
       }
     }
   });
+
+  // 控制"允许非登录用户使用AI搜索"开关的启用/禁用状态
+  const aiSearchEnabled = document.getElementById("ai_search_enabled");
+  const aiSearchAllowAnonymous = document.getElementById(
+    "ai_search_allow_anonymous"
+  );
+
+  function updateAnonymousToggleState() {
+    if (aiSearchEnabled && aiSearchAllowAnonymous) {
+      if (!aiSearchEnabled.checked) {
+        // AI搜索未启用时，禁用并取消选中"允许非登录用户使用AI搜索"
+        aiSearchAllowAnonymous.disabled = true;
+        aiSearchAllowAnonymous.checked = false;
+      } else {
+        // AI搜索启用时，允许操作"允许非登录用户使用AI搜索"
+        aiSearchAllowAnonymous.disabled = false;
+      }
+    }
+  }
+
+  // 页面加载时设置初始状态
+  if (aiSearchEnabled) {
+    updateAnonymousToggleState();
+    // 监听"启用AI搜索"开关的变化
+    aiSearchEnabled.addEventListener("change", updateAnonymousToggleState);
+  }
 </script>
 {% endblock %}

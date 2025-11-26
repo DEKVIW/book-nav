@@ -75,6 +75,7 @@ def create_app(config_class=Config):
                 'footer_content': None,
                 # AI搜索配置默认值
                 'ai_search_enabled': False,
+                'ai_search_allow_anonymous': False,
                 'ai_api_base_url': None,
                 'ai_api_key': None,
                 'ai_model_name': None,

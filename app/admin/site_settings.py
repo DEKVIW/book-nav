@@ -123,6 +123,7 @@ def site_settings():
             
             # 更新AI搜索设置
             settings.ai_search_enabled = form.ai_search_enabled.data
+            settings.ai_search_allow_anonymous = form.ai_search_allow_anonymous.data
             settings.ai_api_base_url = form.ai_api_base_url.data
             # 只有提供了新密钥才更新（留空则不修改，如果输入的是掩码则保持原值）
             api_key_input = form.ai_api_key.data.strip() if form.ai_api_key.data else ""

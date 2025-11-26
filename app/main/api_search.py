@@ -38,6 +38,13 @@ def api_search():
     
     settings = SiteSettings.get_settings()
     
+    # 检查是否允许非登录用户使用AI搜索
+    if use_ai and settings.ai_search_enabled:
+        if not current_user.is_authenticated and not settings.ai_search_allow_anonymous:
+            # 非登录用户且不允许匿名AI搜索，降级为传统搜索
+            use_ai = False
+            progressive = False
+    
     base_query = Website.query
     if not current_user.is_authenticated:
         base_query = base_query.filter_by(is_private=False)
@@ -296,6 +303,26 @@ def api_search():
 def _progressive_search(query: str, user_id: Optional[int]):
     """渐进式搜索：分阶段返回结果"""
     settings = SiteSettings.get_settings()
+    
+    # 再次检查是否允许非登录用户使用AI搜索（双重保护）
+    if not current_user.is_authenticated and not settings.ai_search_allow_anonymous:
+        # 非登录用户且不允许匿名AI搜索，返回空结果
+        def generate_empty():
+            yield f"data: {json_module.dumps({
+                'stage': 'error',
+                'error': 'AI搜索仅限登录用户使用',
+                'websites': [],
+                'total': 0
+            }, ensure_ascii=False)}\n\n"
+            sys.stdout.flush()
+        return Response(
+            stream_with_context(generate_empty()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
+            }
+        )
     
     base_query = Website.query
     if not current_user.is_authenticated:

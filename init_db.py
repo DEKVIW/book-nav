@@ -68,6 +68,7 @@ try:
             # AI 搜索配置字段
             ai_fields = [
                 ('ai_search_enabled', 'BOOLEAN DEFAULT 0'),
+                ('ai_search_allow_anonymous', 'BOOLEAN DEFAULT 0'),
                 ('ai_api_base_url', 'VARCHAR(512)'),
                 ('ai_api_key', 'VARCHAR(512)'),
                 ('ai_model_name', 'VARCHAR(128)'),
@@ -75,8 +76,20 @@ try:
                 ('ai_max_tokens', 'INTEGER DEFAULT 500')
             ]
             
+            # 向量搜索配置字段
+            vector_fields = [
+                ('vector_search_enabled', 'BOOLEAN DEFAULT 0'),
+                ('qdrant_url', 'VARCHAR(512) DEFAULT \'http://localhost:6333\''),
+                ('embedding_model', 'VARCHAR(128) DEFAULT \'text-embedding-3-small\''),
+                ('vector_similarity_threshold', 'REAL DEFAULT 0.3'),
+                ('vector_max_results', 'INTEGER DEFAULT 50')
+            ]
+            
+            # 合并所有需要检查的字段
+            all_fields = ai_fields + vector_fields
+            
             added_count = 0
-            for field_name, field_def in ai_fields:
+            for field_name, field_def in all_fields:
                 if field_name not in column_names:
                     try:
                         sql = f"ALTER TABLE site_settings ADD COLUMN {field_name} {field_def}"
