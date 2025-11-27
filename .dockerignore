@@ -61,4 +61,18 @@ docker-compose.override.yml
 *.bak
 *.swp
 *~
-.*.swp 
+.*.swp
+
+# 文档目录（不需要在镜像中）
+docs/
+
+# 参考项目（不需要在镜像中）
+PixelPunk/
+
+# 测试和开发脚本（运行时不需要）
+test_*.py
+*_test.py
+batch_generate_vectors.py
+init_db.py
+start_qdrant.bat
+stop_qdrant.bat 

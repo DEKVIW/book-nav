@@ -51,15 +51,17 @@ python init_db.py
 ### 4. 配置向量搜索
 
 1. 启动应用：
+
    ```powershell
    python run.py
    ```
 
 2. 访问后台：http://localhost:5000/admin
 
-3. 进入 **站点设置** → **AI搜索设置**
+3. 进入 **站点设置** → **AI 搜索设置**
 
 4. 配置：
+
    - ✅ 启用向量搜索
    - Qdrant 地址：`http://localhost:6333`
    - Embedding 模型：`text-embedding-3-small`
@@ -70,17 +72,23 @@ python init_db.py
 
 ### 5. 为网站生成向量
 
+**方法 A：使用后台管理界面（推荐）**
+
+1. 访问后台：http://localhost:5000/admin
+2. 进入 **站点设置** → **AI 搜索设置**
+3. 在 **向量搜索配置** 区域找到 **批量生成向量索引** 卡片
+4. 点击 **开始生成** 按钮
+5. 实时查看进度和统计信息
+
+**方法 B：使用命令行脚本**
+
 ```powershell
-python test_vector_indexing.py
+python batch_generate_vectors.py
 ```
 
 ### 6. 测试搜索
 
-在前端启用 AI 搜索开关，或运行：
-
-```powershell
-python test_vector_search.py
-```
+在前端启用 AI 搜索开关，输入关键词进行搜索，查看搜索结果是否包含向量搜索的结果。
 
 ## 📝 重要提示
 
@@ -103,5 +111,7 @@ netstat -ano | findstr :6333
 
 ## ❓ 遇到问题？
 
-查看完整指南：`LOCAL_DEVELOPMENT_GUIDE.md`
-
+查看相关文档：
+- [向量索引生成指南](./VECTOR_INDEXING_GUIDE.md)
+- [AI搜索数据流程](./AI_SEARCH_DATA_FLOW.md)
+- [Embedding API 说明](./EMBEDDING_API_EXPLANATION.md)

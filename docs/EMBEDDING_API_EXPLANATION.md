@@ -112,27 +112,47 @@ def index_website(self, website_id, title, description, category_name, url):
 ```python
 # app/utils/vector_service.py - EmbeddingClient.generate_embedding()
 
-def generate_embedding(self, text: str, use_cache: bool = True):
+def generate_embedding(self, text: str, max_retries: int = 3, use_cache: bool = True):
     # 检查缓存
     if use_cache:
         cached_vector = get_cached_vector(text, self.model_name)
         if cached_vector:
             return cached_vector  # 直接返回，不调用 API
     
-    # 缓存未命中，调用 API
-    response = requests.post(url, json=data, headers=headers)
-    embedding = response.json()['data'][0]['embedding']
-    
-    # 缓存结果
-    cache_vector(text, self.model_name, embedding)
-    
-    return embedding
+    # 缓存未命中，调用 API（带重试机制）
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, json=data, headers=headers, timeout=30)
+            # 处理 503 等服务器错误，自动重试
+            if response.status_code == 503:
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # 递增等待：2s, 4s, 6s
+                    time.sleep(wait_time)
+                    continue
+            embedding = response.json()['data'][0]['embedding']
+            
+            # 缓存结果
+            cache_vector(text, self.model_name, embedding)
+            
+            return embedding
+        except Exception as e:
+            # 错误处理和重试逻辑...
+            if attempt < max_retries - 1:
+                continue
+            raise
 ```
 
 **缓存效果：**
 - 相同查询（如"博客"）第二次搜索时，直接使用缓存的向量
 - 不需要再次调用 Embedding API
 - 大大减少 API 调用次数和延迟
+
+**重试机制：**
+- 默认最大重试 3 次
+- 自动处理 503（服务不可用）、502、504 等服务器错误
+- 处理网络超时（30秒超时）
+- 使用指数退避策略（2s, 4s, 6s）
+- 提高 API 调用的可靠性
 
 ## 总结
 

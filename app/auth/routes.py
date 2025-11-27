@@ -62,7 +62,8 @@ def refresh_csrf():
     """刷新CSRF令牌的API接口"""
     try:
         # 生成新的CSRF令牌
-        new_token = csrf._get_token()
+        from flask_wtf.csrf import generate_csrf
+        new_token = generate_csrf()
         return jsonify({
             'success': True,
             'csrf_token': new_token

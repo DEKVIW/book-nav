@@ -308,12 +308,13 @@ def _progressive_search(query: str, user_id: Optional[int]):
     if not current_user.is_authenticated and not settings.ai_search_allow_anonymous:
         # 非登录用户且不允许匿名AI搜索，返回空结果
         def generate_empty():
-            yield f"data: {json_module.dumps({
+            error_data = {
                 'stage': 'error',
                 'error': 'AI搜索仅限登录用户使用',
                 'websites': [],
                 'total': 0
-            }, ensure_ascii=False)}\n\n"
+            }
+            yield f"data: {json_module.dumps(error_data, ensure_ascii=False)}\n\n"
             sys.stdout.flush()
         return Response(
             stream_with_context(generate_empty()),
@@ -368,12 +369,13 @@ def _progressive_search(query: str, user_id: Optional[int]):
                 })
             
             # 立即发送第一阶段结果，不等待其他任务
-            yield f"data: {json_module.dumps({
+            initial_data = {
                 'stage': 'initial',
                 'websites': websites_data,
                 'total': len(websites_data),
                 'status': '关键词搜索结果已返回，正在补充向量搜索结果...'
-            }, ensure_ascii=False)}\n\n"
+            }
+            yield f"data: {json_module.dumps(initial_data, ensure_ascii=False)}\n\n"
             
             # 刷新输出缓冲区，确保数据立即发送到客户端
             sys.stdout.flush()
@@ -449,13 +451,14 @@ def _progressive_search(query: str, user_id: Optional[int]):
                             all_websites = vector_websites[:end_idx] + initial_keyword_results
                             
                             # 发送当前批次（累积结果）
-                            yield f"data: {json_module.dumps({
+                            enhanced_data = {
                                 'stage': 'enhanced',
                                 'websites': all_websites,
                                 'total': len(all_websites),
                                 'status': f'向量搜索结果已补充 ({end_idx}/{len(vector_websites)})，正在AI优化排序...' if batch_idx < total_batches - 1 else '向量搜索结果已补充，正在AI优化排序...',
                                 'is_batch': batch_idx < total_batches - 1  # 标记是否还有更多批次
-                            }, ensure_ascii=False)}\n\n"
+                            }
+                            yield f"data: {json_module.dumps(enhanced_data, ensure_ascii=False)}\n\n"
                             
                             sys.stdout.flush()
                             
@@ -468,22 +471,24 @@ def _progressive_search(query: str, user_id: Optional[int]):
                         # 最终合并所有结果：向量结果在前，关键词结果在后
                         websites_data = vector_websites + initial_keyword_results
                     else:
-                        yield f"data: {json_module.dumps({
+                        enhanced_no_result_data = {
                             'stage': 'enhanced',
                             'websites': websites_data,
                             'total': len(websites_data),
                             'status': '向量搜索未找到新结果'
-                        }, ensure_ascii=False)}\n\n"
+                        }
+                        yield f"data: {json_module.dumps(enhanced_no_result_data, ensure_ascii=False)}\n\n"
                         sys.stdout.flush()
                         
                 except Exception as e:
                     current_app.logger.warning(f"向量搜索失败: {str(e)}")
-                    yield f"data: {json_module.dumps({
+                    enhanced_error_data = {
                         'stage': 'enhanced',
                         'websites': websites_data,
                         'total': len(websites_data),
                         'status': f'向量搜索失败: {str(e)}'
-                    }, ensure_ascii=False)}\n\n"
+                    }
+                    yield f"data: {json_module.dumps(enhanced_error_data, ensure_ascii=False)}\n\n"
             
             if settings.ai_search_enabled and all([settings.ai_api_base_url, settings.ai_api_key, settings.ai_model_name]):
                 if len(websites_data) > 0:
@@ -550,50 +555,55 @@ def _progressive_search(query: str, user_id: Optional[int]):
                         else:
                             ai_summary = None
                         
-                        yield f"data: {json_module.dumps({
+                        final_ai_data = {
                             'stage': 'final',
                             'websites': websites_data,
                             'total': len(websites_data),
                             'ai_enabled': True,
                             'ai_summary': ai_summary,
                             'status': 'AI智能排序完成'
-                        }, ensure_ascii=False)}\n\n"
+                        }
+                        yield f"data: {json_module.dumps(final_ai_data, ensure_ascii=False)}\n\n"
                         
                         # 刷新输出缓冲区
                         sys.stdout.flush()
                     except Exception as e:
                         current_app.logger.error(f"AI排序失败: {str(e)}")
-                        yield f"data: {json_module.dumps({
+                        final_error_data = {
                             'stage': 'final',
                             'websites': websites_data,
                             'total': len(websites_data),
                             'status': f'AI排序失败，使用默认排序: {str(e)}'
-                        }, ensure_ascii=False)}\n\n"
+                        }
+                        yield f"data: {json_module.dumps(final_error_data, ensure_ascii=False)}\n\n"
                 else:
-                    yield f"data: {json_module.dumps({
+                    final_no_result_data = {
                         'stage': 'final',
                         'websites': websites_data,
                         'total': len(websites_data),
                         'ai_enabled': False,
                         'status': '未找到相关网站'
-                    }, ensure_ascii=False)}\n\n"
+                    }
+                    yield f"data: {json_module.dumps(final_no_result_data, ensure_ascii=False)}\n\n"
             else:
-                yield f"data: {json_module.dumps({
+                final_complete_data = {
                     'stage': 'final',
                     'websites': websites_data,
                     'total': len(websites_data),
                     'ai_enabled': False,
                     'status': '搜索完成'
-                }, ensure_ascii=False)}\n\n"
+                }
+                yield f"data: {json_module.dumps(final_complete_data, ensure_ascii=False)}\n\n"
                 
         except Exception as e:
             current_app.logger.error(f"渐进式搜索失败: {str(e)}")
-            yield f"data: {json_module.dumps({
+            error_data = {
                 'stage': 'error',
                 'error': str(e),
                 'websites': [],
                 'total': 0
-            }, ensure_ascii=False)}\n\n"
+            }
+            yield f"data: {json_module.dumps(error_data, ensure_ascii=False)}\n\n"
     
     return Response(
         stream_with_context(generate()),

@@ -44,10 +44,98 @@ else
     cd /app
     python3 << EOF
 from app import create_app, db
+import sqlite3
+import os
+
 app = create_app()
 with app.app_context():
     db.create_all()
     print("数据库结构检查完成")
+    
+    # 检查并添加缺失的字段
+    db_path = "/data/app.db"
+    if os.path.exists(db_path):
+        print("正在检查并更新数据库字段...")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 检查 site_settings 表的字段
+        cursor.execute("PRAGMA table_info(site_settings)")
+        columns = cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        
+        # AI 搜索配置字段（新添加的字段）
+        ai_fields = [
+            ('ai_search_enabled', 'BOOLEAN DEFAULT 0'),
+            ('ai_search_allow_anonymous', 'BOOLEAN DEFAULT 0'),
+            ('ai_api_base_url', 'VARCHAR(512)'),
+            ('ai_api_key', 'VARCHAR(512)'),
+            ('ai_model_name', 'VARCHAR(128)'),
+            ('ai_temperature', 'REAL DEFAULT 0.7'),
+            ('ai_max_tokens', 'INTEGER DEFAULT 500')
+        ]
+        
+        # 向量搜索配置字段（新添加的字段）
+        vector_fields = [
+            ('vector_search_enabled', 'BOOLEAN DEFAULT 0'),
+            ('qdrant_url', 'VARCHAR(512) DEFAULT \'http://localhost:6333\''),
+            ('embedding_model', 'VARCHAR(128) DEFAULT \'text-embedding-3-small\''),
+            ('vector_similarity_threshold', 'REAL DEFAULT 0.3'),
+            ('vector_max_results', 'INTEGER DEFAULT 50')
+        ]
+        
+        # 过渡页设置字段（如果缺失也需要添加）
+        transition_fields = [
+            ('enable_transition', 'BOOLEAN DEFAULT 0'),
+            ('transition_time', 'INTEGER DEFAULT 5'),
+            ('admin_transition_time', 'INTEGER DEFAULT 3'),
+            ('transition_ad1', 'TEXT'),
+            ('transition_ad2', 'TEXT'),
+            ('transition_remember_choice', 'BOOLEAN DEFAULT 1'),
+            ('transition_show_description', 'BOOLEAN DEFAULT 1'),
+            ('transition_theme', 'VARCHAR(32) DEFAULT \'default\''),
+            ('transition_color', 'VARCHAR(32) DEFAULT \'#6e8efb\'')
+        ]
+        
+        # 公告设置字段（如果缺失也需要添加）
+        announcement_fields = [
+            ('announcement_enabled', 'BOOLEAN DEFAULT 0'),
+            ('announcement_title', 'VARCHAR(128)'),
+            ('announcement_content', 'TEXT'),
+            ('announcement_start', 'DATETIME'),
+            ('announcement_end', 'DATETIME'),
+            ('announcement_remember_days', 'INTEGER DEFAULT 7')
+        ]
+        
+        # PC/移动端背景字段（如果缺失也需要添加）
+        background_fields = [
+            ('pc_background_type', 'VARCHAR(32) DEFAULT \'none\''),
+            ('pc_background_url', 'VARCHAR(512)'),
+            ('mobile_background_type', 'VARCHAR(32) DEFAULT \'none\''),
+            ('mobile_background_url', 'VARCHAR(512)')
+        ]
+        
+        # 合并所有需要检查的字段
+        all_fields = ai_fields + vector_fields + transition_fields + announcement_fields + background_fields
+        
+        added_count = 0
+        for field_name, field_def in all_fields:
+            if field_name not in column_names:
+                try:
+                    sql = f"ALTER TABLE site_settings ADD COLUMN {field_name} {field_def}"
+                    cursor.execute(sql)
+                    print(f"  ✓ 已添加字段: {field_name}")
+                    added_count += 1
+                except sqlite3.Error as e:
+                    print(f"  ✗ 添加字段 {field_name} 失败: {e}")
+        
+        if added_count > 0:
+            conn.commit()
+            print(f"✓ 已添加 {added_count} 个新字段")
+        else:
+            print("✓ 所有字段都已存在，无需更新")
+        
+        conn.close()
 EOF
 fi
 

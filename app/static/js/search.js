@@ -75,6 +75,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (data.stage === "error") {
             eventSource.close();
+            _disposeAllTooltips();
             resultsContent.innerHTML =
               '<div class="text-center py-5 text-muted"><i class="bi bi-exclamation-circle fs-1"></i><p class="mt-3">搜索过程中发生错误: ' +
               (data.error || "未知错误") +
@@ -169,6 +170,7 @@ document.addEventListener("DOMContentLoaded", function () {
               }
             } else if (!hasExistingResults) {
               // 如果所有阶段都没有结果
+              _disposeAllTooltips();
               resultsContent.innerHTML =
                 '<div class="text-center py-5 text-muted"><i class="bi bi-search fs-1"></i><p class="mt-3">未找到相关网站</p></div>';
             }
@@ -233,6 +235,8 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .then((data) => {
         console.log("搜索返回数据:", data);
+        // 先销毁所有已存在的 tooltip 实例
+        _disposeAllTooltips();
         // 清空之前的搜索结果
         resultsContent.innerHTML = "";
 
@@ -255,6 +259,7 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .catch((error) => {
         console.error("搜索出错:", error);
+        _disposeAllTooltips();
         resultsContent.innerHTML =
           '<div class="text-center py-5 text-muted"><i class="bi bi-exclamation-circle fs-1"></i><p class="mt-3">搜索过程中发生错误: ' +
           error.message +
@@ -262,8 +267,31 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
+  // 销毁所有 tooltip 实例
+  function _disposeAllTooltips() {
+    if (typeof bootstrap !== "undefined") {
+      const tooltipElements = resultsContent.querySelectorAll(
+        '[data-bs-toggle="tooltip"]'
+      );
+      tooltipElements.forEach(function (element) {
+        const tooltipInstance = bootstrap.Tooltip.getInstance(element);
+        if (tooltipInstance) {
+          tooltipInstance.dispose();
+        }
+      });
+      // 清理可能残留在 body 中的 tooltip DOM 元素
+      const orphanTooltips = document.body.querySelectorAll(".tooltip");
+      orphanTooltips.forEach(function (tooltip) {
+        tooltip.remove();
+      });
+    }
+  }
+
   // 渲染网站列表（通用函数）
   function _renderWebsites(websites) {
+    // 先销毁所有已存在的 tooltip 实例，避免残留
+    _disposeAllTooltips();
+
     // 清空之前的搜索结果
     resultsContent.innerHTML = "";
 
@@ -338,13 +366,16 @@ document.addEventListener("DOMContentLoaded", function () {
         cardContainer.appendChild(siteCard);
       });
 
-      // 初始化工具提示
+      // 初始化工具提示（只初始化新添加的元素，避免重复初始化）
       if (typeof bootstrap !== "undefined") {
         const tooltipTriggerList = [].slice.call(
           resultsContent.querySelectorAll('[data-bs-toggle="tooltip"]')
         );
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-          return new bootstrap.Tooltip(tooltipTriggerEl);
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+          // 检查是否已经初始化过 tooltip
+          if (!bootstrap.Tooltip.getInstance(tooltipTriggerEl)) {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+          }
         });
       }
     } else {
@@ -461,9 +492,12 @@ document.addEventListener("DOMContentLoaded", function () {
           siteCard.style.transform = "translateY(0)";
         }, 10);
 
-        // 初始化工具提示
+        // 初始化工具提示（确保不会重复初始化）
         if (typeof bootstrap !== "undefined") {
-          new bootstrap.Tooltip(siteCard);
+          // 检查是否已经初始化过 tooltip
+          if (!bootstrap.Tooltip.getInstance(siteCard)) {
+            new bootstrap.Tooltip(siteCard);
+          }
         }
       }, index * 80); // 每个卡片延迟 80ms，形成流畅的渐进式效果
     });
@@ -505,6 +539,8 @@ document.addEventListener("DOMContentLoaded", function () {
     searchResults.style.display = "none";
     categoriesContainer.style.display = "block";
     categoriesContainer.style.opacity = "1"; // 确保分类容器可见
+    // 销毁所有 tooltip 实例，避免残留
+    _disposeAllTooltips();
   }
 
   // 监听清除搜索事件

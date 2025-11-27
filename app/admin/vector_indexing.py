@@ -169,8 +169,9 @@ def process_vector_indexing(app, skip_existing: bool = True):
                             f"跳过: {vector_indexing_status['skipped']})"
                         )
                     
-                    # 适当延迟，避免API限流
-                    time.sleep(0.1)
+                    # 适当延迟，避免API限流（503错误通常是限流导致的）
+                    # 如果遇到503错误，建议增加延迟时间到0.5-1秒
+                    time.sleep(0.3)  # 增加到0.3秒，减少API限流
                     
                 except Exception as e:
                     vector_indexing_status['failed'] += 1

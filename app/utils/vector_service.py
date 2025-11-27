@@ -249,9 +249,46 @@ class QdrantVectorStore:
             qdrant_url: Qdrant 服务地址
             vector_dimension: 向量维度（会在首次使用时自动检测）
         """
+        # 在 Docker 环境中，如果 URL 是 localhost，自动转换为服务名
+        qdrant_url = self._normalize_qdrant_url(qdrant_url)
         self.client = QdrantClient(url=qdrant_url)
         self.vector_dimension = vector_dimension
         self._ensure_collection()
+    
+    def _normalize_qdrant_url(self, url: str) -> str:
+        """
+        规范化 Qdrant URL，在 Docker 环境中自动转换 localhost 为服务名
+        
+        Args:
+            url: 原始 Qdrant URL
+            
+        Returns:
+            规范化后的 URL
+        """
+        if not url:
+            return url
+        
+        # 检测是否在 Docker 环境中
+        is_docker = False
+        try:
+            import os
+            # 方法1: 检查 /.dockerenv 文件
+            if os.path.exists('/.dockerenv'):
+                is_docker = True
+            # 方法2: 检查 cgroup
+            elif os.path.exists('/proc/self/cgroup'):
+                with open('/proc/self/cgroup', 'r') as f:
+                    if 'docker' in f.read():
+                        is_docker = True
+        except Exception:
+            pass  # 如果检测失败，默认不转换
+        
+        # 如果在 Docker 环境中且 URL 包含 localhost，转换为服务名
+        if is_docker and 'localhost' in url:
+            url = url.replace('localhost', 'qdrant')
+            current_app.logger.info(f"检测到 Docker 环境，已将 Qdrant URL 从 localhost 转换为服务名: {url}")
+        
+        return url
     
     def _ensure_collection(self, force_recreate: bool = False):
         """

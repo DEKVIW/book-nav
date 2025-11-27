@@ -65,7 +65,7 @@ try:
             columns = cursor.fetchall()
             column_names = [column[1] for column in columns]
             
-            # AI 搜索配置字段
+            # AI 搜索配置字段（新添加的字段）
             ai_fields = [
                 ('ai_search_enabled', 'BOOLEAN DEFAULT 0'),
                 ('ai_search_allow_anonymous', 'BOOLEAN DEFAULT 0'),
@@ -76,7 +76,7 @@ try:
                 ('ai_max_tokens', 'INTEGER DEFAULT 500')
             ]
             
-            # 向量搜索配置字段
+            # 向量搜索配置字段（新添加的字段）
             vector_fields = [
                 ('vector_search_enabled', 'BOOLEAN DEFAULT 0'),
                 ('qdrant_url', 'VARCHAR(512) DEFAULT \'http://localhost:6333\''),
@@ -85,8 +85,39 @@ try:
                 ('vector_max_results', 'INTEGER DEFAULT 50')
             ]
             
+            # 过渡页设置字段（如果缺失也需要添加）
+            transition_fields = [
+                ('enable_transition', 'BOOLEAN DEFAULT 0'),
+                ('transition_time', 'INTEGER DEFAULT 5'),
+                ('admin_transition_time', 'INTEGER DEFAULT 3'),
+                ('transition_ad1', 'TEXT'),
+                ('transition_ad2', 'TEXT'),
+                ('transition_remember_choice', 'BOOLEAN DEFAULT 1'),
+                ('transition_show_description', 'BOOLEAN DEFAULT 1'),
+                ('transition_theme', 'VARCHAR(32) DEFAULT \'default\''),
+                ('transition_color', 'VARCHAR(32) DEFAULT \'#6e8efb\'')
+            ]
+            
+            # 公告设置字段（如果缺失也需要添加）
+            announcement_fields = [
+                ('announcement_enabled', 'BOOLEAN DEFAULT 0'),
+                ('announcement_title', 'VARCHAR(128)'),
+                ('announcement_content', 'TEXT'),
+                ('announcement_start', 'DATETIME'),
+                ('announcement_end', 'DATETIME'),
+                ('announcement_remember_days', 'INTEGER DEFAULT 7')
+            ]
+            
+            # PC/移动端背景字段（如果缺失也需要添加）
+            background_fields = [
+                ('pc_background_type', 'VARCHAR(32) DEFAULT \'none\''),
+                ('pc_background_url', 'VARCHAR(512)'),
+                ('mobile_background_type', 'VARCHAR(32) DEFAULT \'none\''),
+                ('mobile_background_url', 'VARCHAR(512)')
+            ]
+            
             # 合并所有需要检查的字段
-            all_fields = ai_fields + vector_fields
+            all_fields = ai_fields + vector_fields + transition_fields + announcement_fields + background_fields
             
             added_count = 0
             for field_name, field_def in all_fields:

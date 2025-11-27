@@ -47,19 +47,21 @@ class InvitationForm(FlaskForm):
     submit_btn = SubmitField('生成邀请码')
 
 def validate_qdrant_url(form, field):
-    """自定义 Qdrant URL 验证器，允许末尾斜杠"""
+    """自定义 Qdrant URL 验证器，允许末尾斜杠和 Docker 服务名"""
     if field.data:
         url = field.data.strip()
         # 去除末尾斜杠
         url = url.rstrip('/')
         # 验证 URL 格式（允许 http:// 或 https://）
+        # 支持：标准域名、localhost、IP 地址、Docker 服务名（如 qdrant）
         url_pattern = re.compile(
             r'^https?://'  # http:// 或 https://
-            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # 域名
+            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # 标准域名
             r'localhost|'  # localhost
+            r'[A-Z0-9][A-Z0-9_-]*[A-Z0-9]|[A-Z0-9]|'  # Docker 服务名（字母数字下划线连字符，至少1个字符）
             r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP 地址
             r'(?::\d+)?'  # 可选端口
-            r'(?:/?|[/?]\S+)$', re.IGNORECASE)  # 路径（可选）
+            r'(?:/?|[/?]\S+)?$', re.IGNORECASE)  # 路径（可选）
         
         if not url_pattern.match(url):
             raise ValidationError('请输入有效的 URL（例如: http://localhost:6333）')

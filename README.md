@@ -32,6 +32,7 @@ BookNav 基于 Flask Web 框架打造，提供了以下核心功能：
 - **全局快速搜索**: 顶部搜索框支持即时搜索整站内容
 - **多维度匹配**:支持网站标题、URL、描述和关键词的全文搜索
 - **分类内搜索**: 在特定分类页面可限定搜索范围
+- **🤖 AI 智能搜索**: 基于向量语义搜索，支持自然语言查询，渐进式结果展示，后台可批量生成向量索引
 
 ### **📤 数据库导入导出功能**:
 
@@ -95,6 +96,7 @@ BookNav 基于 Flask Web 框架打造，提供了以下核心功能：
 
 - **默认数据库**: SQLite
 - **可选扩展**: 支持 PostgreSQL, MySQL 等关系型数据库
+- **向量数据库**: Qdrant（AI 搜索）
 
 ### 部署
 
@@ -136,25 +138,48 @@ BookNav 基于 Flask Web 框架打造，提供了以下核心功能：
 
 #### 拉取镜像运行
 
+**开发环境**（使用 `docker-compose.yml`）:
+
+```bash
+docker-compose up -d
+```
+
+**生产环境**（使用 `docker-compose.prod.yml`，预构建镜像，Qdrant 端口不暴露）:
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+生产环境配置示例:
+
 ```yaml
 version: "3"
 
 services:
   nav:
-    image: yilan666/booknav-nav:1.9.6
+    image: yilan666/booknav-nav:5.0
     container_name: nav
     restart: always
     ports:
-      - "8988:80" # Nginx端口
+      - "8988:80"
     volumes:
-      - ./data:/data # 数据目录
-      - ./data/backups:/app/app/backups # 备份目录
-      - ./data/uploads:/app/app/static/uploads # 上传文件目录（静态文件中的上传目录）
-      - ./config/nginx:/etc/nginx/http.d # Nginx配置
+      - ./data:/data
+      - ./data/backups:/app/app/backups
+      - ./data/uploads:/app/app/static/uploads
+      - ./config/nginx:/etc/nginx/http.d
     env_file:
       - .env
     environment:
       - DATABASE_URL=sqlite:////data/app.db
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: nav_qdrant
+    restart: always
+    volumes:
+      - ./data/qdrant:/qdrant/storage
 ```
 
 docker-compose.yml 文件同级目录下创建.env 文件
@@ -248,7 +273,33 @@ docker-compose up -d
 
 - **右键菜单**: 在网站卡片或分类上右键点击，使用上下文菜单
 - **拖拽排序**: 长按并拖动网站卡片或分类进行排序
-- **搜索功能**: 使用顶部搜索框查找网站
+- **搜索功能**: 使用顶部搜索框查找网站，支持传统搜索和 AI 智能搜索
+
+### AI 搜索配置
+
+**进入配置页面**: 管理后台 → 站点设置 → AI 搜索配置
+
+#### 1. AI API Key 配置
+
+- **API 基础 URL**: 填写 API 服务地址（如 `https://api.openai.com`）
+- **API 密钥**: 填写 API Key
+- **模型名称**: `gpt-3.5-turbo`、`gpt-4`、`claude-3-sonnet`等
+
+#### 2. 向量搜索配置
+
+- **Qdrant 地址**: Docker 环境使用 `http://qdrant:6333`，本地开发使用 `http://localhost:6333`
+- **Embedding 模型**: `text-embedding-3-small`（默认）、`text-embedding-3-large`、`bge-large-zh-v1.5`（中文推荐）
+- **启用向量搜索**: 开启开关
+
+#### 3. 启用功能
+
+- 开启"启用 AI 智能搜索"
+- 可选：开启"允许非登录用户使用 AI 搜索"
+
+#### 4. 生成向量索引
+
+- 点击"批量生成向量索引"开始按钮
+- 等待进度完成，系统会自动为所有网站生成向量
 
 ## 🔧 目录结构
 
@@ -275,7 +326,8 @@ docker-compose up -d
 ├── .env                  # 环境变量文件
 ├── config.py             # Flask 配置类
 ├── Dockerfile            # Docker 镜像构建文件
-├── docker-compose.yml    # Docker Compose 部署文件
+├── docker-compose.yml    # Docker Compose 部署文件（开发环境）
+├── docker-compose.prod.yml # Docker Compose 部署文件（生产环境）
 ├── requirements.txt      # Python 依赖列表
 └── run.py                # Flask 应用启动入口 (开发用)
 ```

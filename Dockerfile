@@ -8,8 +8,9 @@ WORKDIR /app
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories \
     && apk add --no-cache gcc musl-dev libffi-dev
 
-# 配置pip使用国内镜像源
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+# 配置pip使用国内镜像源（使用阿里云镜像，更稳定）
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
+    && pip config set global.trusted-host mirrors.aliyun.com
 
 # 复制依赖文件，安装到轮子目录
 COPY requirements.txt .
@@ -29,11 +30,19 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositorie
     && apk add --no-cache nginx supervisor libffi tzdata \
     && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone \
-    && mkdir -p /run/nginx /app/app/data /app/app/backups /app/app/uploads /app/app/static /data
+    && mkdir -p /run/nginx /app/app/data /app/app/backups /app/app/uploads /app/app/static /data \
+    && rm -rf /var/cache/apk/* \
+    && rm -rf /tmp/*
 
 # 从构建阶段复制wheel并安装
 COPY --from=builder /app/wheels /wheels
-RUN pip install --no-cache-dir /wheels/*
+RUN pip install --no-cache-dir /wheels/* \
+    && rm -rf /wheels \
+    && rm -rf /root/.cache/pip \
+    && rm -rf /tmp/* \
+    && find /usr/local/lib/python3.9 -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.9 -name "*.pyc" -delete 2>/dev/null || true \
+    && find /usr/local/lib/python3.9 -name "*.pyo" -delete 2>/dev/null || true
 
 # 配置Nginx
 COPY docker/nginx.conf /defaults/nginx.conf

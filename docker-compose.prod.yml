@@ -1,0 +1,42 @@
+version: "3"
+
+services:
+  # 使用预构建镜像（生产环境）
+  nav:
+    image: yilan666/booknav-nav:5.0
+    container_name: nav
+    restart: always
+    ports:
+      - "8988:80" # Nginx端口（仅暴露应用端口）
+    volumes:
+      - ./data:/data # 数据目录（包含数据库）
+      - ./data/backups:/app/app/backups # 备份目录
+      - ./data/uploads:/app/app/static/uploads # 上传文件目录（静态文件中的上传目录）
+      - ./config/nginx:/etc/nginx/http.d # Nginx配置
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:////data/app.db # 显式设置数据库路径到挂载的目录
+    depends_on:
+      - qdrant
+    networks:
+      - nav-network
+
+  # Qdrant 向量数据库（不暴露外部端口，仅容器内部访问）
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: nav_qdrant
+    restart: always
+    # 端口不对外暴露，仅容器内部访问（更安全）
+    # nav 容器可通过服务名 qdrant:6333 访问
+    volumes:
+      - ./data/qdrant:/qdrant/storage # Qdrant 数据持久化
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - nav-network
+
+# 网络配置
+networks:
+  nav-network:
+    driver: bridge

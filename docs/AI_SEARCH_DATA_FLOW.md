@@ -1,4 +1,4 @@
-# AI智能搜索数据传输流程详解
+# AI 智能搜索数据传输流程详解
 
 ## 整体架构
 
@@ -11,23 +11,26 @@
 ### 1. 前端发起搜索（`app/static/js/search.js`）
 
 #### 1.1 用户操作
+
 - 用户在搜索框输入查询关键词
-- 可选择启用/关闭AI搜索（通过 `aiSearchToggle` 开关）
+- 可选择启用/关闭 AI 搜索（通过 `aiSearchToggle` 开关）
 - 提交搜索表单
 
-#### 1.2 构建请求URL
+#### 1.2 构建请求 URL
+
 ```javascript
 // 基础URL
 let searchUrl = `/api/search?q=${encodeURIComponent(query)}`;
 
 // 如果启用AI搜索，添加参数
 if (useAI) {
-    searchUrl += "&ai=true&progressive=true";  // 启用渐进式返回
+  searchUrl += "&ai=true&progressive=true"; // 启用渐进式返回
 }
 ```
 
 #### 1.3 选择搜索方式
-- **AI搜索（渐进式）**：使用 `EventSource` 建立SSE连接
+
+- **AI 搜索（渐进式）**：使用 `EventSource` 建立 SSE 连接
 - **传统搜索**：使用 `fetch` 一次性获取结果
 
 ---
@@ -35,6 +38,7 @@ if (useAI) {
 ### 2. 后端接收请求（`app/main/api_search.py`）
 
 #### 2.1 路由处理
+
 ```python
 @bp.route('/api/search')
 def api_search():
@@ -43,16 +47,38 @@ def api_search():
     progressive = request.args.get('progressive', 'false').lower() == 'true'
 ```
 
-#### 2.2 路由决策
-- 如果 `progressive=true` 且 `use_ai=true` → 调用 `_progressive_search()`（SSE流式返回）
-- 如果 `use_ai=true` 但 `progressive=false` → 执行AI搜索但一次性返回JSON
+#### 2.2 权限检查
+
+- 检查是否允许非登录用户使用 AI 搜索（`ai_search_allow_anonymous`）
+- 如果非登录用户且不允许匿名 AI 搜索，自动降级为传统搜索
+
+#### 2.3 路由决策
+
+- 如果 `progressive=true` 且 `use_ai=true` → 调用 `_progressive_search()`（SSE 流式返回）
+- 如果 `use_ai=true` 但 `progressive=false` → 执行 AI 搜索但一次性返回 JSON
 - 否则 → 执行传统关键词搜索
 
 ---
 
 ### 3. 渐进式搜索流程（`_progressive_search`）
 
-#### 3.1 阶段1：关键词搜索（立即返回）
+#### 3.0 权限验证（双重保护）
+
+```python
+# 再次检查是否允许非登录用户使用AI搜索
+if not current_user.is_authenticated and not settings.ai_search_allow_anonymous:
+    # 返回错误信息
+    yield f"data: {json.dumps({
+        'stage': 'error',
+        'error': 'AI搜索仅限登录用户使用',
+        'websites': [],
+        'total': 0
+    })}\n\n"
+    return
+```
+
+#### 3.1 阶段 1：关键词搜索（立即返回）
+
 ```python
 # 立即执行关键词搜索，不等待其他任务
 keyword_query = base_query.filter(
@@ -75,54 +101,58 @@ sys.stdout.flush()  # 确保立即发送
 ```
 
 **前端处理**：
+
 - 接收到 `stage: 'initial'` 事件
 - 立即渲染关键词搜索结果
 - 显示状态提示："正在补充向量搜索结果..."
 
-#### 3.2 阶段2：向量搜索（分批返回）
+#### 3.2 阶段 2：向量搜索（分批返回）
+
 ```python
 if settings.vector_search_enabled:
     # 1. 生成查询向量
     embedding_client = EmbeddingClient(...)
     query_embedding = embedding_client.generate_embedding(query)
-    
+
     # 2. 在Qdrant中搜索相似向量
     vector_search_results = vector_service.search(
         query=query,
         limit=50,
         threshold=0.3
     )
-    
-    # 3. 分批返回结果（每批15条）
-    batch_size = 15
+
+    # 3. 分批返回结果（每批3条）
+    batch_size = 3  # 每批返回3条，前端会逐个显示（每个80ms，总共240ms）
     for batch_idx in range(total_batches):
         end_idx = min((batch_idx + 1) * batch_size, len(vector_websites))
         all_websites = vector_websites[:end_idx] + initial_keyword_results
-        
+
         yield f"data: {json.dumps({
             'stage': 'enhanced',
             'websites': all_websites,  # 累积结果
             'total': len(all_websites),
             'status': f'向量搜索结果已补充 ({end_idx}/{len(vector_websites)})...'
         })}\n\n"
-        
+
         if batch_idx < total_batches - 1:
-            time.sleep(0.15)  # 150ms延迟，实现渐进效果
+            time.sleep(0.35)  # 350ms延迟，让前端有时间逐个显示当前批次的所有卡片
 ```
 
 **前端处理**：
+
 - 接收到 `stage: 'enhanced'` 事件
-- 检查是否有新网站（通过ID对比）
+- 检查是否有新网站（通过 ID 对比）
 - 如果有新网站，使用 `_appendWebsites()` 增量添加
 - 如果没有新网站但总数增加，重新渲染以更新排序
 
-#### 3.3 阶段3：AI智能排序（最终返回）
+#### 3.3 阶段 3：AI 智能排序（最终返回）
+
 ```python
 if settings.ai_search_enabled:
     # 1. AI意图理解（如果需要）
     if needs_ai_intent:
         intent = ai_service.analyze_search_intent(query)
-    
+
     # 2. AI推荐排序
     recommendations = ai_service.recommend_websites(
         query,
@@ -131,11 +161,11 @@ if settings.ai_search_enabled:
         vector_scores=vector_scores,
         max_recommendations=20
     )
-    
+
     # 3. 按AI推荐顺序重新排序
     recommended_ids = [rec['website_id'] for rec in recommendations['recommendations']]
     ai_sorted_websites = [website_id_map[wid] for wid in recommended_ids]
-    
+
     # 4. 发送最终结果
     yield f"data: {json.dumps({
         'stage': 'final',
@@ -148,28 +178,30 @@ if settings.ai_search_enabled:
 ```
 
 **前端处理**：
+
 - 接收到 `stage: 'final'` 事件
 - 检查结果顺序是否改变
-- 如果顺序改变，重新渲染（AI排序后的顺序）
-- 如果顺序未变，只更新状态提示和AI摘要
-- 关闭EventSource连接
+- 如果顺序改变，重新渲染（AI 排序后的顺序）
+- 如果顺序未变，只更新状态提示和 AI 摘要
+- 关闭 EventSource 连接
 
 ---
 
-### 4. 非渐进式AI搜索流程
+### 4. 非渐进式 AI 搜索流程
 
 #### 4.1 并行执行三个任务
+
 ```python
 with ThreadPoolExecutor(max_workers=3) as executor:
     # 任务1：向量搜索
     future_vector = executor.submit(do_vector_search)
-    
+
     # 任务2：关键词搜索
     future_keyword = executor.submit(do_keyword_search)
-    
+
     # 任务3：AI意图理解（如果需要）
     future_intent = executor.submit(do_ai_intent) if needs_ai_intent else None
-    
+
     # 等待所有任务完成
     vector_ids, vector_scores = future_vector.result()
     keyword_results = future_keyword.result()
@@ -178,6 +210,7 @@ with ThreadPoolExecutor(max_workers=3) as executor:
 ```
 
 #### 4.2 合并和扩展搜索结果
+
 ```python
 # 合并向量搜索和关键词搜索结果
 candidate_sites.update(vector_ids)
@@ -190,11 +223,12 @@ if intent.get('keywords'):
         # 扩展搜索...
 ```
 
-#### 4.3 AI推荐排序
+#### 4.3 AI 推荐排序
+
 ```python
 recommendations = ai_service.recommend_websites(
-    query, 
-    intent, 
+    query,
+    intent,
     websites_for_ai,
     vector_scores=vector_scores,
     max_recommendations=20
@@ -204,7 +238,8 @@ recommendations = ai_service.recommend_websites(
 ai_results = [website_id_map[wid] for wid in recommended_ids]
 ```
 
-#### 4.4 一次性返回JSON
+#### 4.4 一次性返回 JSON
+
 ```python
 return jsonify({
     "websites": websites_data,
@@ -216,14 +251,15 @@ return jsonify({
 
 ---
 
-### 5. AI服务调用（`app/utils/ai_search.py`）
+### 5. AI 服务调用（`app/utils/ai_search.py`）
 
 #### 5.1 意图分析
+
 ```python
 def analyze_search_intent(self, user_query: str) -> dict:
     # 调用AI API
     response = self._call_api(messages, max_tokens=300)
-    
+
     # 返回格式：
     # {
     #     "intent": "用户想要查找与'博客'相关的网站",
@@ -235,6 +271,7 @@ def analyze_search_intent(self, user_query: str) -> dict:
 ```
 
 #### 5.2 网站推荐
+
 ```python
 def recommend_websites(self, user_query, intent, websites, vector_scores, max_recommendations):
     # 构建包含所有网站信息的prompt
@@ -245,10 +282,10 @@ def recommend_websites(self, user_query, intent, websites, vector_scores, max_re
         websites_list=json.dumps(websites_for_ai, ensure_ascii=False),
         max_recommendations=max_recommendations
     )
-    
+
     # 调用AI API
     response = self._call_api(messages, max_tokens=2000)
-    
+
     # 返回格式：
     # {
     #     "recommendations": [
@@ -267,13 +304,15 @@ def recommend_websites(self, user_query, intent, websites, vector_scores, max_re
 ### 6. 向量搜索流程（`app/utils/vector_service.py`）
 
 #### 6.1 生成查询向量
+
 ```python
 # 调用Embedding API
 embedding = embedding_client.generate_embedding(query)
 # 返回：1536维或1024维的浮点数向量
 ```
 
-#### 6.2 Qdrant向量搜索
+#### 6.2 Qdrant 向量搜索
+
 ```python
 # 在Qdrant中搜索相似向量
 results = vector_store.client.search(
@@ -297,18 +336,20 @@ results = vector_store.client.search(
 ### 7. 前端渲染（`app/static/js/search.js`）
 
 #### 7.1 初始阶段渲染
+
 ```javascript
 if (data.stage === "initial") {
-    if (currentWebsites.length > 0) {
-        _renderWebsites(currentWebsites);  // 完整渲染
-    } else {
-        // 显示加载提示
-        resultsContent.innerHTML = `<div class="spinner-border">...</div>`;
-    }
+  if (currentWebsites.length > 0) {
+    _renderWebsites(currentWebsites); // 完整渲染
+  } else {
+    // 显示加载提示
+    resultsContent.innerHTML = `<div class="spinner-border">...</div>`;
+  }
 }
 ```
 
 #### 7.2 增强阶段增量渲染
+
 ```javascript
 else if (data.stage === "enhanced") {
     if (!hasExistingResults && currentWebsites.length > 0) {
@@ -325,12 +366,13 @@ else if (data.stage === "enhanced") {
 ```
 
 #### 7.3 最终阶段智能更新
+
 ```javascript
 else if (data.stage === "final") {
     const currentIds = Array.from(resultsContent.querySelectorAll(".site-card"))
         .map((card) => parseInt(card.dataset.id));
     const newIds = currentWebsites.map((site) => site.id);
-    
+
     // 如果顺序改变，重新渲染
     if (JSON.stringify(currentIds) !== JSON.stringify(newIds)) {
         _renderWebsites(currentWebsites);  // AI排序后的结果
@@ -385,7 +427,7 @@ else if (data.stage === "final") {
 │  阶段2：向量搜索（分批返回）     │
 │  - 生成查询向量（Embedding API）│
 │  - Qdrant向量搜索                │
-│  - 分批返回（每批15条）          │
+│  - 分批返回（每批3条，间隔350ms）│
 │  - SSE发送：stage='enhanced'    │
 └──────┬──────────────────────────┘
        │
@@ -421,49 +463,56 @@ else if (data.stage === "final") {
 ## 关键优化点
 
 ### 1. 渐进式返回
-- **阶段1**：立即返回关键词搜索结果（最快，<100ms）
-- **阶段2**：分批返回向量搜索结果（每批150ms间隔）
-- **阶段3**：返回AI排序后的最终结果
+
+- **阶段 1**：立即返回关键词搜索结果（最快，<100ms）
+- **阶段 2**：分批返回向量搜索结果（每批 3 条，批次间隔 350ms，前端每个卡片 80ms 逐个显示）
+- **阶段 3**：返回 AI 排序后的最终结果
 
 ### 2. 并行处理
-- 向量搜索、关键词搜索、AI意图分析并行执行
+
+- 向量搜索、关键词搜索、AI 意图分析并行执行
 - 使用 `ThreadPoolExecutor` 提高效率
 
 ### 3. 智能缓存
-- 短查询（≤5字符）启用缓存
+
+- 短查询（≤5 字符）启用缓存
 - 缓存键：`query + use_ai + user_id`
-- 缓存TTL：3600秒
+- 缓存 TTL：3600 秒
 
 ### 4. 增量渲染
-- 前端检测新网站ID，只添加新内容
-- 使用CSS动画实现平滑过渡
-- 避免不必要的DOM重绘
+
+- 前端检测新网站 ID，只添加新内容
+- 使用 CSS 动画实现平滑过渡
+- 避免不必要的 DOM 重绘
 
 ### 5. 错误处理
+
 - 每个阶段都有异常捕获
 - 失败时自动降级到传统搜索
 - 前端有超时和错误回退机制
 
 ---
 
-## API调用统计
+## API 调用统计
 
-### 一次完整AI搜索的API调用：
+### 一次完整 AI 搜索的 API 调用：
 
 1. **Embedding API**（向量搜索时）：
-   - 调用次数：1次（生成查询向量）
+
+   - 调用次数：1 次（生成查询向量）
    - 路径：`POST /v1/embeddings`
    - 数据：`{"model": "bge-large-zh-v1.5", "input": "博客"}`
 
-2. **Chat API**（AI排序时）：
-   - 调用次数：1-2次
-     - 意图分析：1次（如果需要）
-     - 网站推荐：1次
+2. **Chat API**（AI 排序时）：
+
+   - 调用次数：1-2 次
+     - 意图分析：1 次（如果需要）
+     - 网站推荐：1 次
    - 路径：`POST /v1/chat/completions`
-   - 数据：包含用户查询和网站列表的prompt
+   - 数据：包含用户查询和网站列表的 prompt
 
 3. **Qdrant API**（向量搜索时）：
-   - 调用次数：1次
+   - 调用次数：1 次
    - 路径：`POST /collections/websites/points/search`
    - 数据：查询向量和相似度阈值
 
@@ -472,20 +521,20 @@ else if (data.stage === "final") {
 ## 性能指标
 
 - **关键词搜索**：<100ms（数据库查询）
-- **向量搜索**：200-500ms（包含Embedding API调用）
-- **AI排序**：500-2000ms（取决于网站数量和AI响应速度）
+- **向量搜索**：200-500ms（包含 Embedding API 调用）
+- **AI 排序**：500-2000ms（取决于网站数量和 AI 响应速度）
 - **总耗时（渐进式）**：
   - 第一阶段：<100ms（用户立即看到结果）
   - 第二阶段：200-500ms（增量补充）
-  - 第三阶段：500-2000ms（AI优化排序）
+  - 第三阶段：500-2000ms（AI 优化排序）
 
 ---
 
 ## 总结
 
-AI智能搜索采用**渐进式流式返回**架构，实现了：
+AI 智能搜索采用**渐进式流式返回**架构，实现了：
+
 1. **快速响应**：关键词结果立即返回
 2. **逐步增强**：向量结果分批补充
-3. **智能排序**：AI最终优化排序
+3. **智能排序**：AI 最终优化排序
 4. **良好体验**：用户看到结果逐步加载，不会长时间等待
-
