@@ -590,49 +590,45 @@
                     <i class="bi bi-robot me-2"></i>AI搜索API配置
                   </h6>
 
-                  <!-- 启用开关 -->
-                  <div class="mb-4">
-                    <div
-                      class="d-flex justify-content-between align-items-center mb-2"
-                    >
-                      <label class="form-label fw-bold mb-0">启用AI搜索</label>
-                      <div class="form-check form-switch">
-                        {{ form.ai_search_enabled(class="form-check-input") }}
-                        <label class="form-check-label" for="ai_search_enabled">
-                          {% if settings.ai_search_enabled %}已启用{% else
-                          %}已关闭{% endif %}
-                        </label>
-                      </div>
-                    </div>
-                    <div class="form-text">
-                      启用后，用户可以在搜索时使用AI智能搜索功能
-                    </div>
-                  </div>
-
-                  <!-- 允许非登录用户使用AI搜索 -->
-                  <div class="mb-3">
-                    <div
-                      class="d-flex justify-content-between align-items-center mb-2"
-                    >
-                      <label class="form-label fw-bold mb-0"
-                        >允许非登录用户使用AI搜索</label
+                  <!-- 启用开关（两列布局） -->
+                  <div class="row mb-3">
+                    <div class="col-6">
+                      <div
+                        class="d-flex justify-content-between align-items-center mb-2"
                       >
-                      <div class="form-check form-switch">
-                        {{
-                        form.ai_search_allow_anonymous(class="form-check-input",
-                        id="ai_search_allow_anonymous") }}
-                        <label
-                          class="form-check-label"
-                          for="ai_search_allow_anonymous"
+                        <label class="form-label fw-bold mb-0"
+                          >启用AI搜索</label
                         >
-                          {% if settings.ai_search_allow_anonymous %}已允许{%
-                          else %}已禁止{% endif %}
-                        </label>
+                        <div class="form-check form-switch">
+                          {{ form.ai_search_enabled(class="form-check-input") }}
+                          <label
+                            class="form-check-label"
+                            for="ai_search_enabled"
+                          >
+                            {% if settings.ai_search_enabled %}已启用{% else
+                            %}已关闭{% endif %}
+                          </label>
+                        </div>
                       </div>
                     </div>
-                    <div class="form-text">
-                      <i class="bi bi-info-circle me-1"></i>
-                      开启后，未登录用户也可以使用AI搜索功能。关闭则仅允许登录用户使用。
+                    <div class="col-6">
+                      <div
+                        class="d-flex justify-content-between align-items-center mb-2"
+                      >
+                        <label class="form-label fw-bold mb-0">允许匿名</label>
+                        <div class="form-check form-switch">
+                          {{
+                          form.ai_search_allow_anonymous(class="form-check-input",
+                          id="ai_search_allow_anonymous") }}
+                          <label
+                            class="form-check-label"
+                            for="ai_search_allow_anonymous"
+                          >
+                            {% if settings.ai_search_allow_anonymous %}已允许{%
+                            else %}已禁止{% endif %}
+                          </label>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -753,44 +749,74 @@
 
                 <!-- 右列：向量搜索配置 -->
                 <div class="col-md-6">
-                  <h6 class="mb-4">
+                  <h6 class="mb-3">
                     <i class="bi bi-database me-2"></i>向量搜索配置
                   </h6>
 
-                  <!-- 启用向量搜索 -->
-                  <div class="mb-4">
-                    <div class="form-check form-switch">
-                      {{ form.vector_search_enabled(class="form-check-input") }}
-                      <label
-                        class="form-check-label"
-                        for="vector_search_enabled"
+                  <!-- 启用向量搜索（两列布局，与左列对齐） -->
+                  <div class="row mb-3">
+                    <div class="col-6">
+                      <div
+                        class="d-flex justify-content-between align-items-center mb-2"
                       >
-                        {% if settings.vector_search_enabled %}已启用{% else
-                        %}未启用{% endif %}向量搜索
-                      </label>
+                        <label class="form-label fw-bold mb-0"
+                          >启用向量搜索</label
+                        >
+                        <div class="form-check form-switch">
+                          {{
+                          form.vector_search_enabled(class="form-check-input")
+                          }}
+                          <label
+                            class="form-check-label"
+                            for="vector_search_enabled"
+                          >
+                            {% if settings.vector_search_enabled %}已启用{% else
+                            %}未启用{% endif %}
+                          </label>
+                        </div>
+                      </div>
                     </div>
-                    <div class="form-text">
-                      启用后，系统会优先使用向量搜索（如果配置正确），提供更快速和准确的搜索结果
+                    <div class="col-6">
+                      <!-- 空白占位，保持与左列对齐 -->
                     </div>
                   </div>
 
-                  <!-- Qdrant 服务地址 -->
+                  <!-- Embedding API 基础URL -->
                   <div class="mb-3">
-                    <label class="form-label fw-bold">Qdrant 服务地址</label>
-                    {{ form.qdrant_url(class="form-control",
-                    placeholder="http://localhost:6333") }} {% if
-                    form.qdrant_url.errors %} {% for error in
-                    form.qdrant_url.errors %}
+                    <label class="form-label fw-bold"
+                      >Embedding API 基础URL</label
+                    >
+                    {{ form.embedding_api_base_url(class="form-control",
+                    placeholder="https://api.openai.com") }} {% if
+                    form.embedding_api_base_url.errors %} {% for error in
+                    form.embedding_api_base_url.errors %}
                     <div class="text-danger">{{ error }}</div>
                     {% endfor %} {% endif %}
-                    <div class="form-text small">
-                      <strong>配置说明：</strong><br />
-                      • <strong>Docker部署</strong>：<code
-                        >http://qdrant:6333</code
-                      ><br />
-                      • <strong>本地开发</strong>：<code
-                        >http://localhost:6333</code
-                      >
+                    <div class="form-text">留空则使用 AI 搜索的 API 配置</div>
+                  </div>
+
+                  <!-- Embedding API 密钥 -->
+                  <div class="mb-3">
+                    <label class="form-label fw-bold">Embedding API 密钥</label>
+                    <input
+                      type="password"
+                      class="form-control"
+                      id="embedding_api_key"
+                      name="embedding_api_key"
+                      placeholder="sk-..."
+                      value="{{ form.embedding_api_key.data if form.embedding_api_key.data else '' }}"
+                    />
+                    {% if form.embedding_api_key.errors %} {% for error in
+                    form.embedding_api_key.errors %}
+                    <div class="text-danger">{{ error }}</div>
+                    {% endfor %} {% endif %}
+                    <div class="form-text">
+                      {% if settings.embedding_api_key %}
+                      <span class="text-success"
+                        ><i class="bi bi-check-circle me-1"></i
+                        >已配置密钥（显示为掩码）</span
+                      >，留空则不修改 {% else %} 留空则使用 AI 搜索的 API 密钥
+                      {% endif %}
                     </div>
                   </div>
 
@@ -804,8 +830,7 @@
                     <div class="text-danger">{{ error }}</div>
                     {% endfor %} {% endif %}
                     <div class="form-text">
-                      用于将文本转换为向量的模型，例如: text-embedding-3-small,
-                      bge-large-zh-v1.5
+                      例如: text-embedding-3-small, bge-large-zh-v1.5
                     </div>
                   </div>
 
@@ -834,14 +859,32 @@
                     </div>
                   </div>
 
+                  <!-- Qdrant 服务地址 -->
+                  <div class="mb-3">
+                    <label class="form-label fw-bold">Qdrant 服务地址</label>
+                    {{ form.qdrant_url(class="form-control",
+                    placeholder="Docker: http://qdrant:6333 | 本地:
+                    http://localhost:6333") }} {% if form.qdrant_url.errors %}
+                    {% for error in form.qdrant_url.errors %}
+                    <div class="text-danger">{{ error }}</div>
+                    {% endfor %} {% endif %}
+                    <div class="form-text">
+                      Docker部署: <code>http://qdrant:6333</code> | 本地部署:
+                      <code>http://localhost:6333</code>
+                    </div>
+                  </div>
+
                   <!-- 向量搜索配置状态提示 -->
-                  {% if settings.vector_search_enabled and settings.qdrant_url
-                  %}
+                  {% set embedding_api_url, embedding_api_key =
+                  settings.get_embedding_api_config() %} {% set
+                  vector_configured = settings.vector_search_enabled and
+                  settings.qdrant_url and settings.embedding_model and
+                  embedding_api_url and embedding_api_key %} {% if
+                  vector_configured %}
                   <div class="alert alert-success mb-3">
                     <i class="bi bi-check-circle me-2"></i>
-                    <strong>向量搜索已启用</strong>
+                    <strong>向量搜索已配置</strong>
                     <p class="mb-0 mt-2 small">
-                      Qdrant: {{ settings.qdrant_url }}<br />
                       模型: {{ settings.embedding_model or
                       'text-embedding-3-small' }}
                     </p>
@@ -850,32 +893,43 @@
                   <div class="alert alert-warning mb-3">
                     <i class="bi bi-exclamation-triangle me-2"></i>
                     <strong>向量搜索配置不完整</strong>
-                    <p class="mb-0 mt-2 small">请填写 Qdrant 服务地址</p>
+                    <p class="mb-0 mt-2 small">请填写必要的配置信息</p>
                   </div>
                   {% else %}
                   <div class="alert alert-info mb-3">
                     <i class="bi bi-info-circle me-2"></i>
                     <strong>向量搜索未启用</strong>
-                    <p class="mb-0 mt-2 small">启用向量搜索需要：</p>
-                    <ul class="mb-0 mt-2 small">
-                      <li>启动 Qdrant 服务</li>
-                      <li>配置 Qdrant 服务地址</li>
-                      <li>确保 AI API 配置正确（用于生成向量）</li>
-                    </ul>
+                    <p class="mb-0 mt-2 small">
+                      启用向量搜索需要配置 Qdrant 和 Embedding API
+                    </p>
                   </div>
                   {% endif %}
 
+                  <!-- 测试向量搜索连接按钮 -->
+                  <div class="mb-3">
+                    <button
+                      type="button"
+                      id="testVectorConfig"
+                      class="btn btn-outline-primary btn-sm"
+                    >
+                      <i class="bi bi-play-circle me-2"></i>测试向量搜索连接
+                    </button>
+                    <div
+                      id="testVectorResult"
+                      class="mt-2"
+                      style="display: none"
+                    ></div>
+                  </div>
+
                   <!-- 批量生成向量 -->
-                  {% if settings.vector_search_enabled and settings.qdrant_url
-                  and settings.embedding_model and settings.ai_api_base_url and
-                  settings.ai_api_key %}
+                  {% if vector_configured %}
                   <div class="card border-primary mb-3">
-                    <div class="card-header bg-primary text-white">
+                    <div class="card-header bg-primary text-white py-2">
                       <i class="bi bi-database-add me-2"></i>批量生成向量索引
                     </div>
-                    <div class="card-body">
-                      <p class="card-text small mb-3">
-                        为数据库中所有网站生成向量索引，用于向量搜索功能。首次使用或更换模型后需要执行此操作。
+                    <div class="card-body py-2">
+                      <p class="card-text small mb-2">
+                        为所有网站生成向量索引，首次使用或更换模型后需要执行
                       </p>
 
                       <div id="vectorIndexingStatus" style="display: none">
@@ -1502,6 +1556,102 @@
       });
     }
 
+    // 测试向量搜索连接
+    const testVectorConfigBtn = document.getElementById("testVectorConfig");
+    const testVectorResultDiv = document.getElementById("testVectorResult");
+    if (testVectorConfigBtn) {
+      testVectorConfigBtn.addEventListener("click", function () {
+        const embeddingApiBaseUrl = document.getElementById(
+          "embedding_api_base_url"
+        )
+          ? document.getElementById("embedding_api_base_url").value.trim()
+          : "";
+        const embeddingApiKeyInput = document.getElementById(
+          "embedding_api_key"
+        )
+          ? document.getElementById("embedding_api_key").value.trim()
+          : "";
+        const embeddingModel = document.getElementById("embedding_model")
+          ? document.getElementById("embedding_model").value.trim()
+          : "";
+        const qdrantUrl = document.getElementById("qdrant_url")
+          ? document.getElementById("qdrant_url").value.trim()
+          : "";
+
+        testVectorConfigBtn.disabled = true;
+        testVectorConfigBtn.innerHTML =
+          '<i class="bi bi-hourglass-split me-2"></i>测试中...';
+        testVectorResultDiv.style.display = "block";
+        testVectorResultDiv.innerHTML =
+          '<div class="alert alert-info"><i class="bi bi-hourglass-split me-2"></i>正在测试连接...</div>';
+
+        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        const csrfToken = csrfTokenMeta
+          ? csrfTokenMeta.getAttribute("content")
+          : "";
+
+        fetch("{{ url_for('admin.test_vector_config') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+          },
+          body: JSON.stringify({
+            embedding_api_base_url: embeddingApiBaseUrl,
+            embedding_api_key: embeddingApiKeyInput,
+            embedding_model: embeddingModel,
+            qdrant_url: qdrantUrl,
+          }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            // 无论成功还是失败，都显示详细的测试结果
+            let detailsHtml = "";
+            if (data.details) {
+              detailsHtml =
+                '<div class="mt-2 small">' +
+                "<div>" +
+                data.details.embedding_api +
+                "</div>" +
+                "<div>" +
+                data.details.qdrant +
+                "</div>" +
+                (data.details.vector_dimension
+                  ? "<div>向量维度: " + data.details.vector_dimension + "</div>"
+                  : "") +
+                "</div>";
+            }
+
+            // 根据整体成功状态选择不同的alert样式
+            const alertClass = data.success ? "alert-success" : "alert-warning";
+            const alertIcon = data.success
+              ? "bi-check-circle"
+              : "bi-exclamation-triangle";
+
+            testVectorResultDiv.innerHTML =
+              '<div class="alert ' +
+              alertClass +
+              '"><i class="bi ' +
+              alertIcon +
+              ' me-2"></i>' +
+              data.message +
+              detailsHtml +
+              "</div>";
+          })
+          .catch((error) => {
+            testVectorResultDiv.innerHTML =
+              '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>测试失败: ' +
+              error.message +
+              "</div>";
+          })
+          .finally(() => {
+            testVectorConfigBtn.disabled = false;
+            testVectorConfigBtn.innerHTML =
+              '<i class="bi bi-play-circle me-2"></i>测试向量搜索连接';
+          });
+      });
+    }
+
     // 绑定移动端事件
     if (mobileTypeSelect && mobileUrlInput && mobilePreview) {
       function syncMobilePreview() {
@@ -1715,5 +1865,75 @@
     // 监听"启用AI搜索"开关的变化
     aiSearchEnabled.addEventListener("change", updateAnonymousToggleState);
   }
+
+  // 动态更新所有开关按钮的标签文字
+  function updateSwitchLabel(checkboxId, labels) {
+    const checkbox = document.getElementById(checkboxId);
+    if (!checkbox) {
+      console.warn(`开关按钮未找到: ${checkboxId}`);
+      return;
+    }
+
+    // 查找对应的label元素（通过for属性或最近的.form-check-label）
+    let label = null;
+    if (checkbox.id) {
+      label = document.querySelector(`label[for="${checkbox.id}"]`);
+    }
+    if (!label) {
+      label = checkbox
+        .closest(".form-check")
+        ?.querySelector(".form-check-label");
+    }
+
+    if (label) {
+      // 初始化标签文字（根据当前checked状态）
+      label.textContent = checkbox.checked ? labels.enabled : labels.disabled;
+
+      // 监听变化事件，实时更新标签文字
+      checkbox.addEventListener("change", function () {
+        label.textContent = this.checked ? labels.enabled : labels.disabled;
+      });
+    } else {
+      console.warn(`开关按钮的标签未找到: ${checkboxId}`);
+    }
+  }
+
+  // 页面加载完成后更新所有开关按钮的标签文字
+  // 弹窗公告
+  updateSwitchLabel("announcement_enabled", {
+    enabled: "已启用",
+    disabled: "未启用",
+  });
+
+  // AI搜索
+  updateSwitchLabel("ai_search_enabled", {
+    enabled: "已启用",
+    disabled: "已关闭",
+  });
+
+  // 允许匿名
+  updateSwitchLabel("ai_search_allow_anonymous", {
+    enabled: "已允许",
+    disabled: "已禁止",
+  });
+
+  // 向量搜索
+  updateSwitchLabel("vector_search_enabled", {
+    enabled: "已启用",
+    disabled: "未启用",
+  });
+
+  // 过渡页
+  updateSwitchLabel("enable_transition", {
+    enabled: "启用",
+    disabled: "关闭",
+  });
 </script>
+
+<style>
+  /* 修复 .mb-2 的 margin-bottom，确保对齐 */
+  .mb-2 {
+    margin-bottom: 0.5rem !important;
+  }
+</style>
 {% endblock %}

@@ -150,19 +150,29 @@ document.addEventListener("DOMContentLoaded", function () {
               ) {
                 // 顺序没变，只更新状态提示
                 if (searchSummary) {
-                  let summaryText = `找到 <strong>${
+                  // 主信息行
+                  let mainText = `<div class="search-summary-main">找到 <strong>${
                     data.total || 0
                   }</strong> 个与 <span class="search-keyword">"${query}"</span> 相关的网站`;
                   if (data.ai_enabled) {
-                    summaryText += ` <span class="badge bg-primary ms-2" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
+                    mainText += ` <span class="badge bg-primary" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
                   }
+                  mainText += `</div>`;
+
+                  // AI摘要
+                  let aiSummaryText = "";
                   if (data.ai_summary) {
-                    summaryText += `<div class="mt-2 text-muted" style="font-size: 0.9rem;"><i class="bi bi-lightbulb me-1"></i>${data.ai_summary}</div>`;
+                    aiSummaryText = `<div class="search-summary-ai"><i class="bi bi-lightbulb"></i><span>${data.ai_summary}</span></div>`;
                   }
+
+                  // 状态信息
+                  let statusText = "";
                   if (data.status) {
-                    summaryText += `<div class="mt-2 text-muted" style="font-size: 0.85rem;"><i class="bi bi-info-circle me-1"></i>${data.status}</div>`;
+                    statusText = `<div class="search-summary-status"><i class="bi bi-info-circle"></i><span>${data.status}</span></div>`;
                   }
-                  searchSummary.innerHTML = summaryText;
+
+                  searchSummary.innerHTML =
+                    mainText + aiSummaryText + statusText;
                 }
               } else {
                 // 顺序改变了，重新渲染（AI排序后的顺序）
@@ -178,19 +188,28 @@ document.addEventListener("DOMContentLoaded", function () {
 
           // 更新状态提示
           if (searchSummary) {
-            let summaryText = `找到 <strong>${
+            // 主信息行
+            let mainText = `<div class="search-summary-main">找到 <strong>${
               data.total || 0
             }</strong> 个与 <span class="search-keyword">"${query}"</span> 相关的网站`;
             if (data.ai_enabled) {
-              summaryText += ` <span class="badge bg-primary ms-2" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
+              mainText += ` <span class="badge bg-primary" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
             }
-            if (data.status) {
-              summaryText += `<div class="mt-2 text-muted" style="font-size: 0.85rem;"><i class="bi bi-info-circle me-1"></i>${data.status}</div>`;
-            }
+            mainText += `</div>`;
+
+            // AI摘要
+            let aiSummaryText = "";
             if (data.ai_summary) {
-              summaryText += `<div class="mt-2 text-muted" style="font-size: 0.9rem;"><i class="bi bi-lightbulb me-1"></i>${data.ai_summary}</div>`;
+              aiSummaryText = `<div class="search-summary-ai"><i class="bi bi-lightbulb"></i><span>${data.ai_summary}</span></div>`;
             }
-            searchSummary.innerHTML = summaryText;
+
+            // 状态信息
+            let statusText = "";
+            if (data.status) {
+              statusText = `<div class="search-summary-status"><i class="bi bi-info-circle"></i><span>${data.status}</span></div>`;
+            }
+
+            searchSummary.innerHTML = mainText + aiSummaryText + statusText;
           }
 
           // 如果是最终阶段，关闭连接
@@ -243,16 +262,22 @@ document.addEventListener("DOMContentLoaded", function () {
         // 设置数量提示到毛玻璃卡片内
         const searchSummary = document.getElementById("searchSummary");
         if (searchSummary) {
-          let summaryText = `找到 <strong>${
+          // 主信息行
+          let mainText = `<div class="search-summary-main">找到 <strong>${
             data.total || data.count || 0
           }</strong> 个与 <span class="search-keyword">"${query}"</span> 相关的网站`;
           if (data.ai_enabled) {
-            summaryText += ` <span class="badge bg-primary ms-2" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
+            mainText += ` <span class="badge bg-primary" style="font-size: 0.75rem;"><i class="bi bi-robot me-1"></i>AI智能搜索</span>`;
           }
+          mainText += `</div>`;
+
+          // AI摘要
+          let aiSummaryText = "";
           if (data.ai_summary) {
-            summaryText += `<div class="mt-2 text-muted" style="font-size: 0.9rem;"><i class="bi bi-lightbulb me-1"></i>${data.ai_summary}</div>`;
+            aiSummaryText = `<div class="search-summary-ai"><i class="bi bi-lightbulb"></i><span>${data.ai_summary}</span></div>`;
           }
-          searchSummary.innerHTML = summaryText;
+
+          searchSummary.innerHTML = mainText + aiSummaryText;
         }
 
         _renderWebsites(data.websites || []);
@@ -334,7 +359,19 @@ document.addEventListener("DOMContentLoaded", function () {
           const img = document.createElement("img");
           img.src = site.icon;
           img.alt = site.title;
+          img.setAttribute("referrerpolicy", "no-referrer");
+          img.onerror = function() {
+            this.style.display = "none";
+            if (this.nextElementSibling) {
+              this.nextElementSibling.style.display = "flex";
+            }
+          };
+          const defaultIcon = document.createElement("div");
+          defaultIcon.className = "default-site-icon";
+          defaultIcon.style.display = "none";
+          defaultIcon.textContent = site.title.charAt(0).toUpperCase();
           iconContainer.appendChild(img);
+          iconContainer.appendChild(defaultIcon);
         } else {
           // 使用网站标题首字母作为默认图标
           const defaultIcon = document.createElement("div");
@@ -455,7 +492,19 @@ document.addEventListener("DOMContentLoaded", function () {
           const img = document.createElement("img");
           img.src = site.icon;
           img.alt = site.title;
+          img.setAttribute("referrerpolicy", "no-referrer");
+          img.onerror = function() {
+            this.style.display = "none";
+            if (this.nextElementSibling) {
+              this.nextElementSibling.style.display = "flex";
+            }
+          };
+          const defaultIcon = document.createElement("div");
+          defaultIcon.className = "default-site-icon";
+          defaultIcon.style.display = "none";
+          defaultIcon.textContent = site.title.charAt(0).toUpperCase();
           iconContainer.appendChild(img);
+          iconContainer.appendChild(defaultIcon);
         } else {
           const defaultIcon = document.createElement("div");
           defaultIcon.className = "default-site-icon";

@@ -199,6 +199,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const iconUrl = this.value.trim();
     if (iconUrl) {
       editIconPreview.src = iconUrl;
+      editIconPreview.setAttribute("referrerpolicy", "no-referrer");
       editIconPreview.style.display = "block";
 
       // 处理加载错误
@@ -343,7 +344,7 @@ document.addEventListener("DOMContentLoaded", function () {
               iconImg.src = icon;
             } else {
               // 如果之前没有图标，创建一个
-              iconContainer.innerHTML = `<img src="${icon}" alt="${title}">`;
+              iconContainer.innerHTML = `<img src="${icon}" alt="${title}" referrerpolicy="no-referrer">`;
             }
           } else if (iconImg) {
             // 如果清除了图标，显示默认图标（使用网站标题首字母）
@@ -557,7 +558,36 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         return response.json();
       })
-      .then((data) => {
+      .then(async (data) => {
+        // 如果获取失败或信息不完整，尝试使用AI填充
+        const hasTitle = data.title && data.title.trim() !== "";
+        const hasDesc = data.description && data.description.trim() !== "";
+        
+        if ((!data.success || !hasTitle || !hasDesc) && supportsDetailedProgress) {
+          updateProgress("正在使用AI生成网站信息...", 50);
+          
+          try {
+            const aiResponse = await fetch(
+              `/api/fetch_website_info?url=${encodeURIComponent(url)}&use_ai_fallback=true`
+            );
+            const aiData = await aiResponse.json();
+            
+            // 如果AI成功生成，使用AI结果
+            if (aiData.success) {
+              if (!hasTitle && aiData.title) {
+                data.title = aiData.title;
+                data.ai_generated_title = true;
+              }
+              if (!hasDesc && aiData.description) {
+                data.description = aiData.description;
+                data.ai_generated_description = true;
+              }
+            }
+          } catch (error) {
+            console.warn("AI生成网站信息失败:", error);
+          }
+        }
+        
         if (data.success) {
           // 直接更新标题和描述，无论是否为空
           if (data.title) {
@@ -669,5 +699,62 @@ document.addEventListener("DOMContentLoaded", function () {
       progressBar.style.width = `${percent}%`;
       progressBar.setAttribute("aria-valuenow", percent);
     }
+  }
+
+  // 翻译描述文本为中文
+  async function translateDescription(descriptionId, buttonId) {
+    const descInput = document.getElementById(descriptionId);
+    const translateBtn = document.getElementById(buttonId);
+    
+    if (!descInput || !translateBtn) {
+      return;
+    }
+    
+    const originalText = descInput.value.trim();
+    
+    if (!originalText) {
+      showTemporaryNotification("请先输入要翻译的文本", "warning");
+      return;
+    }
+    
+    // 禁用按钮并显示加载状态
+    translateBtn.disabled = true;
+    const originalHtml = translateBtn.innerHTML;
+    translateBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    try {
+      const response = await fetch("/api/translate_description", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": document.querySelector('meta[name="csrf-token"]')?.content || "",
+        },
+        body: JSON.stringify({ text: originalText }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        descInput.value = result.translated_text;
+        showTemporaryNotification("翻译成功", "success");
+      } else {
+        showTemporaryNotification(result.message || "翻译失败", "error");
+      }
+    } catch (error) {
+      console.error("翻译失败:", error);
+      showTemporaryNotification("翻译失败，请稍后重试", "error");
+    } finally {
+      // 恢复按钮状态
+      translateBtn.disabled = false;
+      translateBtn.innerHTML = originalHtml;
+    }
+  }
+
+  // 绑定编辑表单的翻译按钮
+  const editTranslateBtn = document.getElementById("editTranslateBtn");
+  if (editTranslateBtn) {
+    editTranslateBtn.addEventListener("click", function () {
+      translateDescription("editDescription", "editTranslateBtn");
+    });
   }
 });

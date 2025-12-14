@@ -539,6 +539,7 @@ DEBUG - Settings信息:
           <div class="site-icon">
             {% if website.icon %}
             <img src="{{ website.icon }}" alt="{{ website.title }}" 
+                 referrerpolicy="no-referrer"
                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
             <div class="default-site-icon" style="display:none;">
               {{ website.title|first|upper }}
@@ -660,6 +661,7 @@ DEBUG - Settings信息:
                   id="editIconPreview"
                   src=""
                   alt=""
+                  referrerpolicy="no-referrer"
                   style="
                     width: 24px;
                     height: 24px;
@@ -679,12 +681,40 @@ DEBUG - Settings信息:
 
           <div class="col-md-12">
             <label class="form-label">网站描述</label>
-            <textarea
-              id="editDescription"
-              class="form-control"
-              rows="1"
-              placeholder="简要描述网站内容和功能"
-            ></textarea>
+            <div style="position: relative;">
+              <textarea
+                id="editDescription"
+                class="form-control"
+                rows="1"
+                placeholder="简要描述网站内容和功能"
+                style="resize: vertical; padding-right: 2.5rem;"
+              ></textarea>
+              <button
+                type="button"
+                class="btn btn-link p-0"
+                id="editTranslateBtn"
+                title="翻译为中文"
+                style="
+                  position: absolute;
+                  top: 0.5rem;
+                  right: 0.5rem;
+                  color: #6c757d;
+                  text-decoration: none;
+                  z-index: 10;
+                  width: 1.5rem;
+                  height: 1.5rem;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  border: none;
+                  background: transparent;
+                "
+                onmouseover="this.style.color='#0d6efd'"
+                onmouseout="this.style.color='#6c757d'"
+              >
+                <i class="bi bi-translate"></i>
+              </button>
+            </div>
           </div>
 
           <div class="col-md-12">
@@ -1002,6 +1032,7 @@ DEBUG - Settings信息:
       if (website.icon) {
         siteIcon.innerHTML = `
           <img src="${website.icon}" alt="${website.title}" 
+               referrerpolicy="no-referrer"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
           <div class="default-site-icon" style="display: none;">${website.title.charAt(0).toUpperCase()}</div>
         `;

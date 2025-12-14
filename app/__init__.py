@@ -80,13 +80,26 @@ def create_app(config_class=Config):
                 'ai_api_key': None,
                 'ai_model_name': None,
                 'ai_temperature': 0.7,
-                'ai_max_tokens': 500
+                'ai_max_tokens': 500,
+                # 向量搜索配置默认值
+                'embedding_api_base_url': None,
+                'embedding_api_key': None
             })
             return {'settings': default_settings}
     
     # 数据库和管理员初始化逻辑
     with app.app_context():
         db.create_all()
+        # 数据库字段迁移（确保新字段自动添加）
+        try:
+            from app.utils.db_migration import migrate_site_settings_fields
+            import os
+            db_path = app.config.get('SQLALCHEMY_DATABASE_URI', '').replace('sqlite:///', '')
+            if db_path and os.path.exists(db_path):
+                migrate_site_settings_fields(db_path)
+        except Exception as e:
+            # 迁移失败不影响应用启动
+            print(f"数据库迁移警告: {str(e)}")
         # 管理员自动创建（合并邮箱冲突检测和升级逻辑）
         admin = User.query.filter_by(username=app.config['ADMIN_USERNAME']).first()
         admin_by_email = User.query.filter_by(email=app.config['ADMIN_EMAIL']).first()

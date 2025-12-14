@@ -168,6 +168,8 @@ class SiteSettingsForm(FlaskForm):
     
     # 向量搜索设置（基于 Qdrant）
     vector_search_enabled = BooleanField('启用向量搜索', description='启用后使用 Qdrant 向量数据库进行高性能语义搜索')
+    embedding_api_base_url = StringField('Embedding API 基础URL', validators=[Optional(), URL(), Length(max=512)], description='用于生成向量的 API 服务地址。如果留空，将使用 AI 搜索的 API 配置。例如: https://api.openai.com')
+    embedding_api_key = PasswordField('Embedding API 密钥', validators=[Optional(), Length(max=256)], description='用于生成向量的 API 密钥。如果留空，将使用 AI 搜索的 API 密钥。留空则不修改现有密钥')
     qdrant_url = StringField('Qdrant 地址', validators=[Optional(), validate_qdrant_url, Length(max=512)], default='http://localhost:6333', description='Qdrant 向量数据库服务地址')
     embedding_model = StringField('Embedding 模型', validators=[Optional(), Length(max=128)], default='text-embedding-3-small', description='用于生成向量的模型名称。常见模型：text-embedding-3-small, text-embedding-ada-002, bge-large-zh-v1.5 等。请根据你的 API 服务支持的模型填写。')
     vector_similarity_threshold = StringField('相似度阈值', validators=[Optional()], default='0.3', description='0-1之间，值越小结果越多，默认0.3')

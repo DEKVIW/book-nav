@@ -233,6 +233,89 @@ class AISearchService:
             raise
 
 
+    def translate_text(self, text: str, target_lang: str = 'zh') -> str:
+        """
+        翻译文本
+        
+        Args:
+            text: 要翻译的文本
+            target_lang: 目标语言（默认：中文）
+            
+        Returns:
+            翻译后的文本
+        """
+        if not text or not text.strip():
+            return text
+        
+        lang_name = "中文" if target_lang == 'zh' else target_lang
+        prompt = f"""请将以下文本翻译为{lang_name}，要求：
+1. 保持原意准确
+2. 语言自然流畅
+3. 只返回翻译结果，不要添加任何解释或说明
+
+原文：
+{text}
+
+翻译结果："""
+        
+        messages = [
+            {"role": "system", "content": "你是一个专业的翻译助手，擅长将各种语言准确翻译为目标语言。"},
+            {"role": "user", "content": prompt}
+        ]
+        
+        try:
+            response = self._call_api(messages, temperature=0.3, max_tokens=500)
+            translated = response['choices'][0]['message']['content'].strip()
+            # 清理可能的引号或其他格式
+            translated = translated.strip('"').strip("'").strip()
+            return translated
+        except Exception as e:
+            current_app.logger.error(f"AI 翻译失败: {str(e)}")
+            raise Exception(f"翻译失败: {str(e)}")
+    
+    def generate_website_info(self, url: str) -> dict:
+        """
+        使用AI根据URL生成网站信息
+        
+        Args:
+            url: 网站URL
+            
+        Returns:
+            包含title和description的字典
+        """
+        prompt = f"""请根据以下网站URL，生成一个简洁准确的网站标题和描述。
+
+网站URL：{url}
+
+要求：
+1. 标题：简洁明了，不超过50个字符，准确反映网站的主要功能或内容
+2. 描述：准确描述网站的主要功能、用途和特点，不超过200个字符
+3. 使用中文
+4. 如果无法确定网站内容，可以根据URL和域名进行合理推测
+
+请以JSON格式返回：
+{{
+    "title": "网站标题",
+    "description": "网站描述"
+}}
+
+只返回JSON，不要其他内容。"""
+        
+        messages = [
+            {"role": "system", "content": "你是一个专业的网站分析助手，能够根据URL准确分析网站的功能和内容。"},
+            {"role": "user", "content": prompt}
+        ]
+        
+        try:
+            response = self._call_api(messages, temperature=0.5, max_tokens=300)
+            content = response['choices'][0]['message']['content']
+            result = self._parse_json_response(content)
+            return result
+        except Exception as e:
+            current_app.logger.error(f"AI 生成网站信息失败: {str(e)}")
+            raise Exception(f"生成网站信息失败: {str(e)}")
+
+
 def create_ai_service_from_settings(settings) -> Optional[AISearchService]:
     """
     从站点设置创建 AI 搜索服务

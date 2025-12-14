@@ -379,24 +379,144 @@ body.bg-none {
 
 .search-header-with-summary {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   background: rgba(255, 255, 255, 0.78);
-  padding: 12px 28px;
+  padding: 16px 28px;
   border-radius: 12px;
   margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(112, 73, 240, 0.07);
+  width: 100%;
+  box-sizing: border-box;
 }
 .search-header-content {
+  flex: 1;
   width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  min-width: 0; /* 允许flex子元素收缩 */
 }
 .search-summary {
   color: var(--text-primary);
   font-size: 1.08rem;
   font-weight: 500;
-  margin-top: 2px;
+  width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.6;
+}
+
+/* 搜索摘要主信息行 */
+.search-summary-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.5;
+}
+
+/* AI摘要和状态信息 */
+.search-summary-ai,
+.search-summary-status {
+  margin-top: 0.75rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.search-summary-ai {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.search-summary-status {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.search-summary-ai i,
+.search-summary-status i {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+/* AI Badge 优化 */
+.search-summary-main .badge {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 响应式优化 */
+@media (max-width: 1024px) {
+  .search-header-with-summary {
+    padding: 14px 20px;
+  }
+  .search-summary {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-header-with-summary {
+    padding: 12px 16px;
+    margin-bottom: 20px;
+  }
+  .search-summary {
+    font-size: 0.95rem;
+  }
+  .search-summary-main {
+    gap: 0.4rem;
+  }
+  .search-summary-ai {
+    font-size: 0.85rem;
+    margin-top: 0.6rem;
+  }
+  .search-summary-status {
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
+  .search-summary-main .badge {
+    font-size: 0.7rem !important;
+    padding: 0.25em 0.5em;
+  }
+}
+
+/* 确保搜索提示容器与搜索结果容器宽度一致 */
+#resultsContainer {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 在小屏幕上，搜索提示容器与卡片容器对齐 */
+@media (max-width: 576px) {
+  #resultsContainer {
+    padding: 0;
+  }
+  .search-header-with-summary {
+    margin-left: 0;
+    margin-right: 0;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 576px) {
+  .search-header-with-summary {
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+  .search-summary {
+    font-size: 0.9rem;
+  }
+  .search-summary-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .search-summary-ai,
+  .search-summary-status {
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
 }
 
 .search-status {

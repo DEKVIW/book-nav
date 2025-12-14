@@ -84,15 +84,16 @@ def api_search():
                 
                 def do_vector_search():
                     """向量搜索任务"""
-                    if not (settings.vector_search_enabled and all([settings.qdrant_url, settings.embedding_model])):
+                    embedding_api_url, embedding_api_key = settings.get_embedding_api_config()
+                    if not (settings.vector_search_enabled and all([settings.qdrant_url, settings.embedding_model, embedding_api_url, embedding_api_key])):
                         return [], {}
                     
                     try:
                         from app.utils.vector_service import EmbeddingClient, QdrantVectorStore, VectorSearchService
                         
                         embedding_client = EmbeddingClient(
-                            api_base_url=settings.ai_api_base_url,
-                            api_key=settings.ai_api_key,
+                            api_base_url=embedding_api_url,
+                            api_key=embedding_api_key,
                             model_name=settings.embedding_model or 'text-embedding-3-small'
                         )
                         vector_store = QdrantVectorStore(
@@ -380,13 +381,14 @@ def _progressive_search(query: str, user_id: Optional[int]):
             # 刷新输出缓冲区，确保数据立即发送到客户端
             sys.stdout.flush()
             
-            if settings.ai_search_enabled and settings.vector_search_enabled and all([settings.qdrant_url, settings.embedding_model]):
+            embedding_api_url, embedding_api_key = settings.get_embedding_api_config()
+            if settings.ai_search_enabled and settings.vector_search_enabled and all([settings.qdrant_url, settings.embedding_model, embedding_api_url, embedding_api_key]):
                 try:
                     from app.utils.vector_service import EmbeddingClient, QdrantVectorStore, VectorSearchService
                     
                     embedding_client = EmbeddingClient(
-                        api_base_url=settings.ai_api_base_url,
-                        api_key=settings.ai_api_key,
+                        api_base_url=embedding_api_url,
+                        api_key=embedding_api_key,
                         model_name=settings.embedding_model or 'text-embedding-3-small'
                     )
                     vector_store = QdrantVectorStore(

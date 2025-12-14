@@ -243,6 +243,8 @@ class SiteSettings(db.Model):
     vector_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用向量搜索
     qdrant_url = db.Column(db.String(512), default='http://localhost:6333')  # Qdrant 服务地址
     embedding_model = db.Column(db.String(128), default='text-embedding-3-small')  # Embedding 模型
+    embedding_api_base_url = db.Column(db.String(512), nullable=True)  # Embedding API 基础 URL（独立配置）
+    embedding_api_key = db.Column(db.String(512), nullable=True)  # Embedding API 密钥（独立配置，加密存储）
     vector_similarity_threshold = db.Column(db.Float, default=0.3)  # 向量相似度阈值
     vector_max_results = db.Column(db.Integer, default=50)  # 向量搜索最大结果数
     
@@ -289,6 +291,21 @@ class SiteSettings(db.Model):
             db.session.add(settings)
             db.session.commit()
         return settings
+    
+    def get_embedding_api_config(self):
+        """
+        获取 Embedding API 配置（向后兼容）
+        
+        优先使用独立的 Embedding API 配置，如果未配置则回退到 AI 搜索配置
+        
+        Returns:
+            tuple: (api_base_url, api_key)
+        """
+        # 优先使用独立配置
+        if self.embedding_api_base_url and self.embedding_api_key:
+            return self.embedding_api_base_url, self.embedding_api_key
+        # 回退到 AI 搜索配置
+        return self.ai_api_base_url, self.ai_api_key
     
     def __repr__(self):
         return f'<SiteSettings {self.site_name}>'

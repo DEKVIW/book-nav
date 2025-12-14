@@ -201,6 +201,13 @@ def add():
         db.session.add(operation_log)
         db.session.commit()
         
+        # 异步生成向量（如果向量搜索已启用）
+        try:
+            from app.main.api_website import _trigger_vector_indexing
+            _trigger_vector_indexing(website.id, category_name)
+        except Exception as e:
+            current_app.logger.warning(f"触发向量生成失败: {str(e)}")
+        
         flash('链接添加成功！', 'success')
         return redirect(url_for('main.add'))
         
@@ -278,6 +285,21 @@ def edit(id):
             db.session.add(operation_log)
             db.session.commit()
         
+        # 检查是否需要更新向量（标题、描述或分类变化时）
+        needs_vector_update = (
+            old_title != website.title or
+            old_description != website.description or
+            old_category_id != website.category_id
+        )
+        
+        if needs_vector_update:
+            try:
+                from app.main.api_website import _trigger_vector_indexing
+                new_category_name = website.category.name if website.category else None
+                _trigger_vector_indexing(website.id, new_category_name)
+            except Exception as e:
+                current_app.logger.warning(f"触发向量更新失败: {str(e)}")
+        
         flash('链接更新成功！', 'success')
         return redirect(url_for('main.site', id=website.id))
         
@@ -319,8 +341,19 @@ def delete(id):
     )
     
     db.session.add(operation_log)
+    
+    # 在删除数据库记录之前，先保存网站ID
+    website_id = website.id
     db.session.delete(website)
     db.session.commit()
+    
+    # 删除向量数据（在数据库提交成功后，避免影响事务）
+    try:
+        from app.utils.vector_service import delete_website_vector
+        delete_website_vector(website_id)
+    except Exception as e:
+        # 向量删除失败不应该影响网站删除，只记录日志
+        current_app.logger.warning(f"删除网站向量时出错: {str(e)}")
     
     flash('链接删除成功！', 'success')
     return redirect(url_for('main.index'))

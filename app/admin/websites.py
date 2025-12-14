@@ -90,6 +90,15 @@ def batch_delete_websites():
         deleted_count = Website.query.filter(Website.id.in_(website_ids)).delete(synchronize_session=False)
         db.session.commit()
         
+        # 删除向量数据（在数据库提交成功后，避免影响事务）
+        try:
+            from app.utils.vector_service import delete_website_vector
+            for website_id in website_ids:
+                delete_website_vector(website_id)
+        except Exception as e:
+            # 向量删除失败不应该影响网站删除，只记录日志
+            current_app.logger.warning(f"批量删除网站向量时出错: {str(e)}")
+        
         return jsonify({
             'success': True,
             'message': f'成功删除 {deleted_count} 个网站'
@@ -308,8 +317,19 @@ def delete_website(id):
     )
     
     db.session.add(operation_log)
+    
+    # 在删除数据库记录之前，先保存网站ID
+    website_id = website.id
     db.session.delete(website)
     db.session.commit()
+    
+    # 删除向量数据（在数据库提交成功后，避免影响事务）
+    try:
+        from app.utils.vector_service import delete_website_vector
+        delete_website_vector(website_id)
+    except Exception as e:
+        # 向量删除失败不应该影响网站删除，只记录日志
+        current_app.logger.warning(f"删除网站向量时出错: {str(e)}")
     
     flash('网站删除成功', 'success')
     return redirect(url_for('admin.websites'))

@@ -200,6 +200,14 @@ def clear_websites():
         # 提交更改
         db.session.commit()
         
+        # 清空所有向量数据（在数据库提交成功后，避免影响事务）
+        try:
+            from app.utils.vector_service import clear_all_vectors
+            clear_all_vectors()
+        except Exception as e:
+            # 向量清空失败不应该影响网站清空，只记录日志
+            current_app.logger.warning(f"清空所有向量时出错: {str(e)}")
+        
         # 记录日志
         current_app.logger.info(f"已清空所有网站链接数据，共删除{website_count}条记录")
         
@@ -229,6 +237,14 @@ def clear_all_data():
         
         # 提交更改
         db.session.commit()
+        
+        # 清空所有向量数据（在数据库提交成功后，避免影响事务）
+        try:
+            from app.utils.vector_service import clear_all_vectors
+            clear_all_vectors()
+        except Exception as e:
+            # 向量清空失败不应该影响数据清空，只记录日志
+            current_app.logger.warning(f"清空所有向量时出错: {str(e)}")
         
         # 记录日志
         current_app.logger.info(f"已清空所有数据，共删除{website_count}条链接和{category_count}个分类")

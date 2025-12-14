@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """工具API路由"""
 
-from flask import request, jsonify, Response, stream_with_context
-from flask_login import current_user
+from flask import request, jsonify, Response, stream_with_context, current_app
+from flask_login import current_user, login_required
 from app.main import bp
 from app.models import Website, Category
 from app.main.utils import parse_website_info, get_website_icon
@@ -48,10 +48,41 @@ def site_info(site_id):
 def fetch_website_info():
     """获取网站信息（标题、描述、图标）"""
     url = request.args.get('url', '')
+    use_ai_fallback = request.args.get('use_ai_fallback', 'false').lower() == 'true'
+    
     if not url:
         return jsonify({"success": False, "message": "未提供URL参数"})
     
     result = parse_website_info(url)
+    
+    # 如果获取失败或信息不完整，且启用了AI回退，尝试使用AI生成
+    if use_ai_fallback and (not result.get("success") or not result.get("title") or not result.get("description")):
+        try:
+            from app.models import SiteSettings
+            from app.utils.ai_search import create_ai_service_from_settings
+            
+            settings = SiteSettings.get_settings()
+            ai_service = create_ai_service_from_settings(settings)
+            
+            if ai_service:
+                current_app.logger.info(f"使用AI生成网站信息: {url}")
+                ai_result = ai_service.generate_website_info(url)
+                
+                # 如果原有结果失败，使用AI结果
+                if not result.get("success"):
+                    result = {"success": True, "title": "", "description": ""}
+                
+                # 填充缺失的信息
+                if not result.get("title") and ai_result.get("title"):
+                    result["title"] = ai_result["title"]
+                    result["ai_generated_title"] = True
+                
+                if not result.get("description") and ai_result.get("description"):
+                    result["description"] = ai_result["description"]
+                    result["ai_generated_description"] = True
+        except Exception as e:
+            current_app.logger.warning(f"AI生成网站信息失败: {str(e)}")
+            # AI失败不影响原有逻辑
     
     icon_result = get_website_icon(url)
     if icon_result["success"]:
@@ -59,7 +90,7 @@ def fetch_website_info():
     elif "fallback_url" in icon_result:
         result["icon_url"] = icon_result["fallback_url"]
     
-    if result["success"]:
+    if result.get("success"):
         processed_url = url
         if not processed_url.startswith(('http://', 'https://')):
             processed_url = 'https://' + processed_url
@@ -79,6 +110,45 @@ def api_get_website_icon():
     
     result = get_website_icon(url)
     return jsonify(result)
+
+
+@bp.route('/api/translate_description', methods=['POST'])
+@login_required
+def translate_description():
+    """翻译描述文本为中文"""
+    try:
+        data = request.get_json()
+        text = data.get('text', '').strip()
+        
+        if not text:
+            return jsonify({"success": False, "message": "未提供要翻译的文本"})
+        
+        from app.models import SiteSettings
+        from app.utils.ai_search import create_ai_service_from_settings
+        
+        settings = SiteSettings.get_settings()
+        ai_service = create_ai_service_from_settings(settings)
+        
+        if not ai_service:
+            return jsonify({
+                "success": False, 
+                "message": "AI服务未配置或未启用，无法使用翻译功能"
+            }), 400
+        
+        translated = ai_service.translate_text(text, target_lang='zh')
+        
+        return jsonify({
+            "success": True,
+            "translated_text": translated,
+            "original_text": text
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"翻译失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"翻译失败: {str(e)}"
+        }), 500
 
 
 @bp.route('/api/fetch_website_info_with_progress')

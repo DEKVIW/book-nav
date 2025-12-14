@@ -85,9 +85,11 @@ def process_vector_indexing(app, skip_existing: bool = True):
                 current_app.logger.error("无法获取站点设置")
                 return
             
-            if not all([settings.ai_api_base_url, settings.ai_api_key, settings.embedding_model]):
+            # 获取 Embedding API 配置（向后兼容）
+            embedding_api_url, embedding_api_key = settings.get_embedding_api_config()
+            if not all([embedding_api_url, embedding_api_key, settings.embedding_model]):
                 vector_indexing_status['is_running'] = False
-                current_app.logger.error("AI搜索配置不完整")
+                current_app.logger.error("Embedding API 配置不完整")
                 return
             
             if not settings.qdrant_url:
@@ -97,8 +99,8 @@ def process_vector_indexing(app, skip_existing: bool = True):
             
             # 初始化向量服务
             embedding_client = EmbeddingClient(
-                api_base_url=settings.ai_api_base_url,
-                api_key=settings.ai_api_key,
+                api_base_url=embedding_api_url,
+                api_key=embedding_api_key,
                 model_name=settings.embedding_model or 'text-embedding-3-small'
             )
             vector_store = QdrantVectorStore(
@@ -213,10 +215,12 @@ def batch_generate_vectors():
             'message': '无法获取站点设置'
         })
     
-    if not all([settings.ai_api_base_url, settings.ai_api_key, settings.embedding_model]):
+    # 获取 Embedding API 配置（向后兼容）
+    embedding_api_url, embedding_api_key = settings.get_embedding_api_config()
+    if not all([embedding_api_url, embedding_api_key, settings.embedding_model]):
         return jsonify({
             'success': False,
-            'message': 'AI搜索配置不完整，请先配置API地址、密钥和模型'
+            'message': 'Embedding API 配置不完整，请先配置API地址、密钥和模型'
         })
     
     if not settings.qdrant_url:

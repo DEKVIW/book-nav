@@ -533,6 +533,7 @@
                 src="{{ website.icon or url_for('static', filename='images/default-icon.png') }}"
                 alt="{{ website.title }}"
                 class="img-fluid"
+                referrerpolicy="no-referrer"
                 onerror="this.style.display='none';this.parentNode.innerHTML='<div class=\'site-icon-fallback\'>🔗</div>';"
               />
             </div>

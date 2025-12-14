@@ -87,6 +87,49 @@ document.addEventListener("paste", async function (e) {
     // 如果获取失败，至少填充URL
     document.getElementById("quickAddUrl").value = pastedData;
 
+    // 尝试使用AI填充
+    try {
+      updateQuickAddProgress("正在使用AI生成网站信息...", 90);
+
+      const requestOptions = {
+        method: "GET",
+        redirect: "follow",
+      };
+
+      const aiResult = await fetch(
+        `/api/fetch_website_info?url=${encodeURIComponent(
+          pastedData
+        )}&use_ai_fallback=true`,
+        requestOptions
+      ).then((r) => r.json());
+
+      // 如果AI成功生成，填充表单
+      if (aiResult.success) {
+        document.getElementById("quickAddTitle").value = aiResult.title || "";
+        document.getElementById("quickAddDescription").value =
+          aiResult.description || "";
+
+        if (aiResult.icon_url) {
+          const iconInput = document.getElementById("quickAddIcon");
+          const iconPreview = document.getElementById("quickAddIconPreview");
+          iconInput.value = aiResult.icon_url;
+          iconPreview.src = aiResult.icon_url;
+          iconPreview.setAttribute("referrerpolicy", "no-referrer");
+          iconPreview.style.display = "block";
+        }
+
+        updateQuickAddProgress("AI生成完成", 100);
+        showTemporaryNotification(
+          "网站信息获取失败，已使用AI生成（请检查并调整）",
+          "warning"
+        );
+        setQuickAddLoading(false);
+        return;
+      }
+    } catch (aiError) {
+      console.warn("AI生成也失败:", aiError);
+    }
+
     // 提供错误类型信息
     let errorMessage = "获取网站信息失败";
     if (error.name === "AbortError") {
@@ -191,9 +234,83 @@ async function fetchWithProgress(url) {
       }
     }
 
-    // 如果没有获取到结果
+    // 如果没有获取到结果，尝试使用AI填充
     if (!result) {
-      throw new Error("未收到完整的网站信息");
+      updateQuickAddProgress("正在使用AI生成网站信息...", 85);
+
+      try {
+        const requestOptions = {
+          method: "GET",
+          redirect: "follow",
+        };
+
+        const aiResult = await fetch(
+          `/api/fetch_website_info?url=${encodeURIComponent(
+            url
+          )}&use_ai_fallback=true`,
+          requestOptions
+        ).then((r) => r.json());
+
+        // 如果AI成功生成，使用AI结果
+        if (aiResult.success) {
+          result = {
+            success: true,
+            title: aiResult.title || "",
+            description: aiResult.description || "",
+            icon_url: aiResult.icon_url || "",
+            domain: aiResult.domain || "",
+            ai_generated_title: !!aiResult.title,
+            ai_generated_description: !!aiResult.description,
+          };
+        } else {
+          // AI也失败了，抛出错误
+          throw new Error("未收到完整的网站信息，AI生成也失败");
+        }
+      } catch (error) {
+        console.warn("AI生成网站信息失败:", error);
+        throw new Error("未收到完整的网站信息");
+      }
+    }
+
+    // 如果获取失败或信息不完整，尝试使用AI填充
+    const hasTitleSuccess = result.title && result.title.trim() !== "";
+    const hasDescSuccess =
+      result.description && result.description.trim() !== "";
+
+    if (!result.success || !hasTitleSuccess || !hasDescSuccess) {
+      updateQuickAddProgress("正在使用AI生成网站信息...", 85);
+
+      try {
+        const requestOptions = {
+          method: "GET",
+          redirect: "follow",
+        };
+
+        const aiResult = await fetch(
+          `/api/fetch_website_info?url=${encodeURIComponent(
+            url
+          )}&use_ai_fallback=true`,
+          requestOptions
+        ).then((r) => r.json());
+
+        // 如果AI成功生成，使用AI结果
+        if (aiResult.success) {
+          if (!hasTitleSuccess && aiResult.title) {
+            result.title = aiResult.title;
+            result.ai_generated_title = true;
+          }
+          if (!hasDescSuccess && aiResult.description) {
+            result.description = aiResult.description;
+            result.ai_generated_description = true;
+          }
+          // 如果result.success为false，但AI生成了内容，更新success状态
+          if (!result.success && (aiResult.title || aiResult.description)) {
+            result.success = true;
+          }
+        }
+      } catch (error) {
+        console.warn("AI生成网站信息失败:", error);
+      }
     }
 
     // 填充表单
@@ -209,30 +326,37 @@ async function fetchWithProgress(url) {
 
       iconInput.value = result.icon_url;
       iconPreview.src = result.icon_url;
+      iconPreview.setAttribute("referrerpolicy", "no-referrer");
       iconPreview.style.display = "block";
     }
 
-    // 详细分析获取情况
-    const hasTitleSuccess = result.title && result.title.trim() !== "";
-    const hasDescSuccess =
+    // 更新获取情况
+    const finalHasTitleSuccess = result.title && result.title.trim() !== "";
+    const finalHasDescSuccess =
       result.description && result.description.trim() !== "";
     const hasIconSuccess = result.icon_url && result.icon_url.trim() !== "";
 
     // 根据获取结果提供精确的反馈
-    if (hasTitleSuccess && hasDescSuccess && hasIconSuccess) {
+    if (finalHasTitleSuccess && finalHasDescSuccess && hasIconSuccess) {
       // 全部成功
-      showTemporaryNotification("网站信息获取成功", "success");
+      let successMsg = "网站信息获取成功";
+      if (result.ai_generated_title || result.ai_generated_description) {
+        successMsg += "（部分信息由AI生成）";
+      }
+      showTemporaryNotification(successMsg, "success");
     } else {
       // 部分失败
       let missingParts = [];
-      if (!hasTitleSuccess) missingParts.push("标题");
-      if (!hasDescSuccess) missingParts.push("描述");
+      if (!finalHasTitleSuccess) missingParts.push("标题");
+      if (!finalHasDescSuccess) missingParts.push("描述");
       if (!hasIconSuccess) missingParts.push("图标");
 
-      showTemporaryNotification(
-        `${missingParts.join("、")}获取失败，请手动补充`,
-        "warning"
-      );
+      let warningMsg = `${missingParts.join("、")}获取失败`;
+      if (result.ai_generated_title || result.ai_generated_description) {
+        warningMsg += "（已尝试AI生成）";
+      }
+      warningMsg += "，请手动补充";
+      showTemporaryNotification(warningMsg, "warning");
     }
   } finally {
     clearTimeout(timeoutId);
@@ -254,13 +378,52 @@ async function fetchWebsiteInfoTraditional(url) {
     redirect: "follow",
   };
 
-  const websiteInfo = await fetch(
+  let websiteInfo = await fetch(
     `/api/fetch_website_info?url=${encodeURIComponent(url)}`,
     requestOptions
   ).then((r) => r.json());
 
+  // 如果获取失败或信息不完整，尝试使用AI填充
+  const hasTitleSuccess = websiteInfo.title && websiteInfo.title.trim() !== "";
+  const hasDescSuccess =
+    websiteInfo.description && websiteInfo.description.trim() !== "";
+
+  // 无论是否支持详细进度，都尝试AI填充
+  if (!websiteInfo.success || !hasTitleSuccess || !hasDescSuccess) {
+    if (supportsDetailedProgress) {
+      updateQuickAddProgress("正在使用AI生成网站信息...", 60);
+    }
+
+    try {
+      const aiResult = await fetch(
+        `/api/fetch_website_info?url=${encodeURIComponent(
+          url
+        )}&use_ai_fallback=true`,
+        requestOptions
+      ).then((r) => r.json());
+
+      // 如果AI成功生成，使用AI结果
+      if (aiResult.success) {
+        if (!hasTitleSuccess && aiResult.title) {
+          websiteInfo.title = aiResult.title;
+          websiteInfo.ai_generated_title = true;
+        }
+        if (!hasDescSuccess && aiResult.description) {
+          websiteInfo.description = aiResult.description;
+          websiteInfo.ai_generated_description = true;
+        }
+        // 如果原来失败，但AI生成了内容，更新success状态
+        if (!websiteInfo.success && (aiResult.title || aiResult.description)) {
+          websiteInfo.success = true;
+        }
+      }
+    } catch (error) {
+      console.warn("AI生成网站信息失败:", error);
+    }
+  }
+
   if (supportsDetailedProgress) {
-    updateQuickAddProgress("正在解析网站标题和描述...", 60);
+    updateQuickAddProgress("正在解析网站标题和描述...", 70);
   }
 
   // 填充表单
@@ -269,9 +432,10 @@ async function fetchWebsiteInfoTraditional(url) {
   document.getElementById("quickAddDescription").value =
     websiteInfo.description || "";
 
-  // 详细分析获取情况
-  const hasTitleSuccess = websiteInfo.title && websiteInfo.title.trim() !== "";
-  const hasDescSuccess =
+  // 更新获取情况
+  const finalHasTitleSuccess =
+    websiteInfo.title && websiteInfo.title.trim() !== "";
+  const finalHasDescSuccess =
     websiteInfo.description && websiteInfo.description.trim() !== "";
   const hasIconSuccess =
     websiteInfo.icon_url && websiteInfo.icon_url.trim() !== "";
@@ -286,6 +450,7 @@ async function fetchWebsiteInfoTraditional(url) {
     const iconPreview = document.getElementById("quickAddIconPreview");
     iconInput.value = websiteInfo.icon_url;
     iconPreview.src = websiteInfo.icon_url;
+    iconPreview.setAttribute("referrerpolicy", "no-referrer");
     iconPreview.style.display = "block";
   }
 
@@ -294,9 +459,16 @@ async function fetchWebsiteInfoTraditional(url) {
   }
 
   // 根据获取结果提供精确的反馈
-  if (hasTitleSuccess && hasDescSuccess && hasIconSuccess) {
+  if (finalHasTitleSuccess && finalHasDescSuccess && hasIconSuccess) {
     // 全部成功
-    showTemporaryNotification("网站信息获取成功", "success");
+    let successMsg = "网站信息获取成功";
+    if (
+      websiteInfo.ai_generated_title ||
+      websiteInfo.ai_generated_description
+    ) {
+      successMsg += "（部分信息由AI生成）";
+    }
+    showTemporaryNotification(successMsg, "success");
   } else if (!websiteInfo.success) {
     // API返回失败
     let failReason = "";
@@ -319,14 +491,19 @@ async function fetchWebsiteInfoTraditional(url) {
   } else {
     // 部分失败
     let missingParts = [];
-    if (!hasTitleSuccess) missingParts.push("标题");
-    if (!hasDescSuccess) missingParts.push("描述");
+    if (!finalHasTitleSuccess) missingParts.push("标题");
+    if (!finalHasDescSuccess) missingParts.push("描述");
     if (!hasIconSuccess) missingParts.push("图标");
 
-    showTemporaryNotification(
-      `${missingParts.join("、")}获取失败，请手动补充`,
-      "warning"
-    );
+    let warningMsg = `${missingParts.join("、")}获取失败`;
+    if (
+      websiteInfo.ai_generated_title ||
+      websiteInfo.ai_generated_description
+    ) {
+      warningMsg += "（已尝试AI生成）";
+    }
+    warningMsg += "，请手动补充";
+    showTemporaryNotification(warningMsg, "warning");
   }
 }
 
@@ -532,3 +709,68 @@ function updateQuickAddProgress(message, percent = null) {
     }
   }
 }
+
+/**
+ * 翻译描述文本为中文
+ * @param {string} descriptionId - 描述输入框的ID
+ * @param {string} buttonId - 翻译按钮的ID
+ */
+async function translateDescription(descriptionId, buttonId) {
+  const descInput = document.getElementById(descriptionId);
+  const translateBtn = document.getElementById(buttonId);
+
+  if (!descInput || !translateBtn) {
+    return;
+  }
+
+  const originalText = descInput.value.trim();
+
+  if (!originalText) {
+    showTemporaryNotification("请先输入要翻译的文本", "warning");
+    return;
+  }
+
+  // 禁用按钮并显示加载状态
+  translateBtn.disabled = true;
+  const originalHtml = translateBtn.innerHTML;
+  translateBtn.innerHTML =
+    '<span class="spinner-border spinner-border-sm"></span>';
+
+  try {
+    const response = await fetch("/api/translate_description", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken":
+          document.querySelector('meta[name="csrf-token"]')?.content || "",
+      },
+      body: JSON.stringify({ text: originalText }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      descInput.value = result.translated_text;
+      showTemporaryNotification("翻译成功", "success");
+    } else {
+      showTemporaryNotification(result.message || "翻译失败", "error");
+    }
+  } catch (error) {
+    console.error("翻译失败:", error);
+    showTemporaryNotification("翻译失败，请稍后重试", "error");
+  } finally {
+    // 恢复按钮状态
+    translateBtn.disabled = false;
+    translateBtn.innerHTML = originalHtml;
+  }
+}
+
+// 绑定快速添加表单的翻译按钮
+document.addEventListener("DOMContentLoaded", function () {
+  const quickAddTranslateBtn = document.getElementById("quickAddTranslateBtn");
+  if (quickAddTranslateBtn) {
+    quickAddTranslateBtn.addEventListener("click", function () {
+      translateDescription("quickAddDescription", "quickAddTranslateBtn");
+    });
+  }
+});

@@ -318,6 +318,15 @@ def delete_deadlinks():
         # 提交事务
         db.session.commit()
         
+        # 删除向量数据（在数据库提交成功后，避免影响事务）
+        try:
+            from app.utils.vector_service import delete_website_vector
+            for website_id in link_ids:
+                delete_website_vector(website_id)
+        except Exception as e:
+            # 向量删除失败不应该影响网站删除，只记录日志
+            current_app.logger.warning(f"批量删除死链向量时出错: {str(e)}")
+        
         return jsonify({
             'success': True,
             'message': f'已成功删除 {delete_count} 个无效链接'

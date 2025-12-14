@@ -227,8 +227,18 @@ def api_delete_website(id):
         
         db.session.add(operation_log)
         
+        # 在删除数据库记录之前，先删除向量数据
+        website_id = website.id
         db.session.delete(website)
         db.session.commit()
+        
+        # 删除向量数据（在数据库提交成功后，避免影响事务）
+        try:
+            from app.utils.vector_service import delete_website_vector
+            delete_website_vector(website_id)
+        except Exception as e:
+            # 向量删除失败不应该影响网站删除，只记录日志
+            current_app.logger.warning(f"删除网站向量时出错: {str(e)}")
         
         return jsonify({
             'success': True, 
@@ -509,16 +519,24 @@ def _trigger_vector_indexing(website_id: int, category_name: str = None):
         website_id: 网站ID
         category_name: 分类名称（如果为None，会从数据库查询）
     """
+    # 在主线程中获取应用实例（必须在应用上下文中调用）
+    try:
+        app = current_app._get_current_object()
+    except RuntimeError:
+        # 如果不在应用上下文中，无法启动后台任务
+        return
+    
     def _generate_vector_in_background():
         try:
             # 在后台线程中创建新的应用上下文
-            with current_app.app_context():
+            with app.app_context():
                 settings = SiteSettings.get_settings()
                 
                 # 检查向量搜索是否启用
+                embedding_api_url, embedding_api_key = settings.get_embedding_api_config()
                 if not (settings and settings.vector_search_enabled and 
                         all([settings.qdrant_url, settings.embedding_model, 
-                             settings.ai_api_base_url, settings.ai_api_key])):
+                             embedding_api_url, embedding_api_key])):
                     return
                 
                 # 获取网站信息
@@ -537,8 +555,8 @@ def _trigger_vector_indexing(website_id: int, category_name: str = None):
                 from app.utils.vector_service import EmbeddingClient, QdrantVectorStore, VectorSearchService
                 
                 embedding_client = EmbeddingClient(
-                    api_base_url=settings.ai_api_base_url,
-                    api_key=settings.ai_api_key,
+                    api_base_url=embedding_api_url,
+                    api_key=embedding_api_key,
                     model_name=settings.embedding_model or 'text-embedding-3-small'
                 )
                 vector_store = QdrantVectorStore(
@@ -556,9 +574,15 @@ def _trigger_vector_indexing(website_id: int, category_name: str = None):
                     url=website.url or ""
                 )
                 
-                current_app.logger.info(f"网站 {website_id} 向量生成成功")
+                app.logger.info(f"网站 {website_id} 向量生成成功")
         except Exception as e:
-            current_app.logger.error(f"后台向量生成失败 (website_id={website_id}): {str(e)}")
+            # 异常处理也需要在应用上下文中，如果上下文创建失败，使用 print 作为后备
+            try:
+                with app.app_context():
+                    app.logger.error(f"后台向量生成失败 (website_id={website_id}): {str(e)}")
+            except Exception:
+                # 如果连应用上下文都无法创建，使用 print 作为最后的后备
+                print(f"后台向量生成失败 (website_id={website_id}): {str(e)}")
     
     # 在后台线程中执行，不阻塞主流程
     thread = threading.Thread(target=_generate_vector_in_background, daemon=True)

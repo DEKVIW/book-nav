@@ -442,10 +442,75 @@ class QdrantVectorStore:
                 collection_name=self.COLLECTION_NAME,
                 points_selector=[website_id]
             )
+            current_app.logger.info(f"成功删除向量 (website_id={website_id})")
         except Exception as e:
             current_app.logger.error(f"删除向量失败 (website_id={website_id}): {str(e)}")
             # 删除失败不算严重错误，只记录日志
             current_app.logger.warning(f"删除向量警告: {str(e)}")
+
+
+def delete_website_vector(website_id: int):
+    """
+    删除网站的向量数据（辅助函数）
+    
+    Args:
+        website_id: 网站ID
+    """
+    try:
+        from app.models import SiteSettings
+        
+        # 获取配置
+        settings = SiteSettings.get_settings()
+        
+        # 检查是否配置了 Qdrant
+        if not settings or not settings.qdrant_url:
+            current_app.logger.debug(f"Qdrant 未配置，跳过向量删除 (website_id={website_id})")
+            return
+        
+        # 初始化向量存储并删除
+        vector_store = QdrantVectorStore(
+            qdrant_url=settings.qdrant_url,
+            vector_dimension=1024  # 维度会在删除时自动检测，这里用默认值
+        )
+        vector_store.delete_vector(website_id)
+    except Exception as e:
+        # 向量删除失败不应该影响网站删除，只记录日志
+        current_app.logger.warning(f"删除网站向量时出错 (website_id={website_id}): {str(e)}")
+
+
+def clear_all_vectors():
+    """
+    清空所有向量数据（辅助函数）
+    用于清空所有网站时同步清空向量
+    """
+    try:
+        from app.models import SiteSettings
+        
+        # 获取配置
+        settings = SiteSettings.get_settings()
+        
+        # 检查是否配置了 Qdrant
+        if not settings or not settings.qdrant_url:
+            current_app.logger.debug("Qdrant 未配置，跳过向量清空")
+            return
+        
+        # 初始化向量存储
+        vector_store = QdrantVectorStore(
+            qdrant_url=settings.qdrant_url,
+            vector_dimension=1024  # 维度会在删除时自动检测，这里用默认值
+        )
+        
+        # 删除整个集合（会重新创建空集合）
+        try:
+            vector_store.client.delete_collection(collection_name=QdrantVectorStore.COLLECTION_NAME)
+            current_app.logger.info("成功清空所有向量数据")
+            # 重新创建集合
+            vector_store._ensure_collection()
+        except Exception as e:
+            current_app.logger.warning(f"清空向量数据时出错: {str(e)}")
+    except Exception as e:
+        # 向量清空失败不应该影响网站清空，只记录日志
+        current_app.logger.warning(f"清空所有向量时出错: {str(e)}")
 
 
 class VectorSearchService:
