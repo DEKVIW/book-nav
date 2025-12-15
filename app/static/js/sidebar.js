@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", function () {
     savedSidebarState = "false";
   }
 
-  // 优先使用保存的状态，如果没有则根据设备尺寸和页面类型决定
+  // 优先使用保存的状态，如果没有则默认关闭
   if (savedSidebarState !== null) {
     if (savedSidebarState === "true") {
       bodyElement.classList.add("sidebar-active");
@@ -33,12 +33,8 @@ document.addEventListener("DOMContentLoaded", function () {
       bodyElement.classList.remove("sidebar-active");
     }
   } else {
-    // 默认显示侧边栏（桌面设备，非分类页面）
-    if (window.innerWidth >= 768 && pageType !== "category") {
-      bodyElement.classList.add("sidebar-active");
-    } else {
-      bodyElement.classList.remove("sidebar-active");
-    }
+    // 默认关闭侧边栏
+    bodyElement.classList.remove("sidebar-active");
   }
 
   // 菜单切换功能
@@ -94,28 +90,12 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("resize", function () {
     const isMobile = window.innerWidth < 768;
     const currentState = bodyElement.classList.contains("sidebar-active");
+    const savedState = localStorage.getItem(storageKey);
 
-    // 在没有明确用户偏好的情况下，根据页面类型和设备大小调整侧边栏
-    // 如果是分类页面，无论设备大小如何，都使用用户最后设置的状态
-    if (pageType === "category") {
-      const savedState = localStorage.getItem(storageKey);
-      if (savedState === null) {
-        bodyElement.classList.remove("sidebar-active");
-        localStorage.setItem(storageKey, "false");
-      }
-      return;
-    }
-
-    // 只在设备类型改变时自动调整侧边栏状态（仅适用于首页和默认页面）
-    // 从移动设备变为桌面设备且侧边栏是关闭的
-    if (!isMobile && !currentState && !localStorage.getItem(storageKey)) {
-      bodyElement.classList.add("sidebar-active");
-      localStorage.setItem(storageKey, "true");
-    }
-    // 从桌面设备变为移动设备且用户没有明确设置过侧边栏状态
-    else if (isMobile && currentState && !localStorage.getItem(storageKey)) {
+    // 保持用户当前状态，不自动调整
+    // 如果用户没有明确设置过状态，保持关闭
+    if (savedState === null) {
       bodyElement.classList.remove("sidebar-active");
-      localStorage.setItem(storageKey, "false");
     }
   });
 });

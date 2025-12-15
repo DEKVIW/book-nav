@@ -77,14 +77,22 @@ body.sidebar-active .footer {
   opacity: 0.7;
 }
 
+/* 根据data属性判断是否有背景，避免闪烁 */
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"]) .footer,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not([data-mobile-bg-type="none"]) .footer,
 body:not(.bg-none) .footer {
-  background: rgba(0, 0, 0, 0.4);
-  color: #f3f3f3;
+  background: rgba(255, 255, 255, 0.7); /* 白色半透明，与链接卡片一致 */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.1);
+  color: inherit; /* 保持原有文字颜色 */
   border: none;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"]) .footer .text-muted,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"]) .footer p.small,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not([data-mobile-bg-type="none"]) .footer .text-muted,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not([data-mobile-bg-type="none"]) .footer p.small,
 body:not(.bg-none) .footer .text-muted,
 body:not(.bg-none) .footer p.small {
-  color: #b0b8c9 !important;
+  color: inherit !important; /* 保持原有文字颜色 */
 }

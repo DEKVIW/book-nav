@@ -13,22 +13,71 @@
   padding: 0 1.5rem;
 }
 
+/* 根据data属性判断是否有背景，避免闪烁 */
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .top-navbar,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .top-navbar,
 body:not(.bg-none) .top-navbar {
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.7); /* 白色半透明，与链接卡片一致 */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
 }
+
+/* 背景模式下导航栏文字改为深色（因为背景是白色） */
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .top-navbar
+  .navbar-logo,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .top-navbar
+  .navbar-action,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .top-navbar
+  .user-action-btn,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .top-navbar
+  .navbar-logo,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .top-navbar
+  .navbar-action,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .top-navbar
+  .user-action-btn,
 body:not(.bg-none) .top-navbar .navbar-logo,
 body:not(.bg-none) .top-navbar .navbar-action,
 body:not(.bg-none) .top-navbar .user-action-btn {
-  color: #fff;
+  color: var(--text-primary); /* 使用主题文字颜色（深色） */
 }
+
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .top-navbar
+  .navbar-action:hover,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .top-navbar
+  .user-action-btn:hover,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .top-navbar
+  .navbar-action:hover,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .top-navbar
+  .user-action-btn:hover,
 body:not(.bg-none) .top-navbar .navbar-action:hover,
 body:not(.bg-none) .top-navbar .user-action-btn:hover {
-  color: #ffd86b;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(112, 73, 240, 0.1); /* 主题色半透明背景 */
+  color: var(--primary-color);
 }
 
 .navbar-logo {
@@ -63,6 +112,16 @@ body:not(.bg-none) .top-navbar .user-action-btn:hover {
 
 .menu-toggle:hover {
   background: rgba(255, 255, 255, 0.15);
+}
+
+/* 背景模式下菜单切换按钮改为深色，使其在白色背景下明显 */
+body:not(.bg-none) .menu-toggle {
+  color: var(--text-primary); /* 深色文字 */
+}
+
+body:not(.bg-none) .menu-toggle:hover {
+  background: rgba(112, 73, 240, 0.1); /* 主题色半透明背景 */
+  color: var(--primary-color);
 }
 
 /* 搜索栏 */

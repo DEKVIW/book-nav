@@ -82,16 +82,16 @@ head %}
       <ul class="sidebar-menu">
         {% for category in categories %} {% if category.parent_id is none %}
         <li
-          class="sidebar-menu-item {% if category.children.count() > 0 %}has-submenu{% endif %}"
+          class="sidebar-menu-item {% if category.children_list|length > 0 %}has-submenu{% endif %}"
         >
           <a href="#{{ category.name }}" class="sidebar-menu-link">
             <span class="sidebar-menu-icon">
               {{ render_icon(category.icon or 'folder', category.color or
               '#3498db') }}
             </span>
-            {{ category.name }} {% if category.children.count() > 0 %}
+            {{ category.name }} {% if category.children_list|length > 0 %}
             <span class="category-children-count"
-              >{{ category.children.count() }}</span
+              >{{ category.children_list|length }}</span
             >
             <button class="submenu-toggle" tabindex="-1" aria-label="展开/收起">
               <svg viewBox="0 0 24 24">
@@ -100,9 +100,9 @@ head %}
             </button>
             {% endif %}
           </a>
-          {% if category.children.count() > 0 %}
+          {% if category.children_list|length > 0 %}
           <ul class="sidebar-submenu">
-            {% for child in category.children %}
+            {% for child in category.children_list %}
             <li class="sidebar-submenu-item">
               <a
                 href="{{ url_for('main.category', id=child.id) }}"
@@ -199,7 +199,7 @@ head %}
     <div id="categoriesContainer">
       {% for category in categories %} {% if category.parent_id is none %}
       <div id="{{ category.name }}" class="mb-5">
-        {% if category.children.count() == 0 %}
+        {% if category.children_list|length == 0 %}
         <div class="category-card">
           <a
             href="{{ url_for('main.category', id=category.id) }}"
@@ -213,26 +213,17 @@ head %}
                 <i class="bi bi-{{ category.icon or 'folder' }}"></i>
               </span>
               {{ category.name }}
-              <span class="category-count">{{ category.total_count }}</span>
+              <span class="category-count"
+                >{% if category.children_list|length > 0 %}{{
+                category.total_count_with_children }}{% else %}{{
+                category.total_count }}{% endif %}</span
+              >
             </h3>
           </a>
         </div>
-        {% endif %} {# 子分类标签导航 #} {% if category.children.count() > 0 %}
+        {% endif %} {# 子分类标签导航 #} {% if category.children_list|length > 0 %}
         <div class="subcategory-tags">
-          <a
-            href="{{ url_for('main.category', id=category.id) }}"
-            class="subcategory-tag"
-          >
-            <span
-              class="tag-icon"
-              style="background-color: {{ category.color or '#3498db' }}"
-            >
-              <i class="bi bi-folder"></i>
-            </span>
-            全部
-            <span class="subcategory-count">{{ category.total_count }}</span>
-          </a>
-          {% for child in category.children %}
+          {% for child in category.children_list %}
           <a
             href="{{ url_for('main.category', id=child.id) }}"
             class="subcategory-tag"
@@ -246,7 +237,22 @@ head %}
             {{ child.name }}
             <span class="subcategory-count">{{ child.total_count }}</span>
           </a>
-          {% endfor %}
+          {% endfor %} {# 如果有直接属于一级分类的链接，显示"未分类"标签 #} {%
+          if category.total_count > 0 %}
+          <a
+            href="{{ url_for('main.category', id=category.id) }}"
+            class="subcategory-tag"
+          >
+            <span
+              class="tag-icon"
+              style="background-color: {{ category.color or '#6c757d' }}"
+            >
+              <i class="bi bi-folder-x"></i>
+            </span>
+            未分类
+            <span class="subcategory-count">{{ category.total_count }}</span>
+          </a>
+          {% endif %}
         </div>
         {% endif %} {% set websites = category.website_list %} {% if websites %}
         <div

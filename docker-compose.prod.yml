@@ -3,7 +3,7 @@ version: "3"
 services:
   # 使用预构建镜像（生产环境）
   nav:
-    image: yilan666/booknav-nav:5.0
+    image: yilan666/booknav-nav:latest
     container_name: nav
     restart: always
     ports:

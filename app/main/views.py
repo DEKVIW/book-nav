@@ -14,7 +14,8 @@ from datetime import datetime
 @bp.route('/')
 def index():
     """首页"""
-    categories = Category.query.order_by(Category.order.desc()).all()
+    # 只获取一级分类（parent_id为None的分类）
+    categories = Category.query.filter_by(parent_id=None).order_by(Category.order.desc()).all()
     
     featured_sites_query = Website.query.filter_by(is_featured=True)
     if not current_user.is_authenticated:
@@ -38,15 +39,13 @@ def index():
                 (Website.visible_to.contains(str(current_user.id)))
             )
         
-        category.total_count = websites_query.count()
+        # 计算一级分类下直接链接的数量（直接属于一级分类的网站）
+        category.direct_website_count = websites_query.count()
         
-        category.website_list = websites_query.order_by(
-            Website.sort_order.desc(),
-            Website.created_at.asc(),
-            Website.views.desc()
-        ).limit(category.display_limit).all()
-        
-        for child in category.children:
+        # 获取所有子分类并计算每个子分类的网站数量
+        children = category.children.order_by(Category.order.desc()).all()
+        children_total_count = 0
+        for child in children:
             child_query = Website.query.filter_by(category_id=child.id)
             if not current_user.is_authenticated:
                 child_query = child_query.filter_by(is_private=False)
@@ -56,7 +55,63 @@ def index():
                     (Website.created_by_id == current_user.id) |
                     (Website.visible_to.contains(str(current_user.id)))
                 )
+            # 计算子分类的网站数量
             child.total_count = child_query.count()
+            children_total_count += child.total_count
+        
+        # 将处理过的子分类列表存储到category对象，供模板使用（即使为空也要设置）
+        category.children_list = children
+        
+        # 如果一级分类有子分类
+        if len(children) > 0:
+            # 一级分类下未分类的链接数量 = 直接链接数量（直接属于一级分类的就是未分类的）
+            category.total_count = category.direct_website_count
+            # 一级分类的总数 = 直接链接数量 + 所有子分类的网站数量
+            category.total_count_with_children = category.direct_website_count + children_total_count
+            
+            # 智能默认显示逻辑：如果未分类网站数量 < display_limit，则显示第一个二级分类的网站
+            if category.direct_website_count < category.display_limit:
+                # 获取第一个二级分类（权重靠前的，order值最大的）
+                first_child = children[0]
+                # 查询第一个二级分类的网站
+                first_child_query = Website.query.filter_by(category_id=first_child.id)
+                if not current_user.is_authenticated:
+                    first_child_query = first_child_query.filter_by(is_private=False)
+                elif not current_user.is_admin:
+                    first_child_query = first_child_query.filter(
+                        (Website.is_private == False) |
+                        (Website.created_by_id == current_user.id) |
+                        (Website.visible_to.contains(str(current_user.id)))
+                    )
+                # 使用第一个二级分类的网站列表
+                category.website_list = first_child_query.order_by(
+                    Website.sort_order.desc(),
+                    Website.created_at.asc(),
+                    Website.views.desc()
+                ).limit(category.display_limit).all()
+                # 标记当前显示的是第一个子分类（用于可能的后续功能）
+                category.displayed_subcategory_id = first_child.id
+            else:
+                # 未分类网站数量 >= display_limit，显示未分类的网站
+                category.website_list = websites_query.order_by(
+                    Website.sort_order.desc(),
+                    Website.created_at.asc(),
+                    Website.views.desc()
+                ).limit(category.display_limit).all()
+                # 标记当前显示的是未分类
+                category.displayed_subcategory_id = None
+        else:
+            # 如果一级分类没有子分类，直接链接数量就是总数
+            category.total_count = category.direct_website_count
+            category.total_count_with_children = category.direct_website_count
+            # 没有子分类时，直接显示一级分类的网站
+            category.website_list = websites_query.order_by(
+                Website.sort_order.desc(),
+                Website.created_at.asc(),
+                Website.views.desc()
+            ).limit(category.display_limit).all()
+            # 标记当前显示的是主分类
+            category.displayed_subcategory_id = None
     
     settings = SiteSettings.get_settings()
     
@@ -114,6 +169,32 @@ def category(id):
                             .all()
     if children:
         context['children'] = children
+        # 计算一级分类下直接链接的数量（未分类的）
+        direct_websites_query = Website.query.filter_by(category_id=id)
+        if not current_user.is_authenticated:
+            direct_websites_query = direct_websites_query.filter_by(is_private=False)
+        elif not current_user.is_admin:
+            direct_websites_query = direct_websites_query.filter(
+                (Website.is_private == False) |
+                (Website.created_by_id == current_user.id) |
+                (Website.visible_to.contains(str(current_user.id)))
+            )
+        # 计算所有子分类的网站数量
+        children_total_count = 0
+        for child in children:
+            child_query = Website.query.filter_by(category_id=child.id)
+            if not current_user.is_authenticated:
+                child_query = child_query.filter_by(is_private=False)
+            elif not current_user.is_admin:
+                child_query = child_query.filter(
+                    (Website.is_private == False) |
+                    (Website.created_by_id == current_user.id) |
+                    (Website.visible_to.contains(str(current_user.id)))
+                )
+            child.total_count = child_query.count()
+            children_total_count += child.total_count
+        # 未分类的数量 = 直接链接数量 - 子分类链接数量
+        context['uncategorized_count'] = max(0, direct_websites_query.count() - children_total_count)
     
     return render_template('category.html', **context)
 

@@ -34,19 +34,9 @@
           "sidebarActive" + (pageType !== "default" ? "-" + pageType : "");
         var savedState = localStorage.getItem(storageKey);
 
-        // 分类页面默认关闭侧边栏，除非明确保存了开启状态
-        if (pageType === "category") {
-          if (savedState === "true") {
-            document.documentElement.classList.add("sidebar-active-preload");
-          }
-        } else {
-          // 其他页面使用原来的逻辑
-          if (
-            savedState === "true" ||
-            (savedState === null && window.innerWidth >= 768)
-          ) {
-            document.documentElement.classList.add("sidebar-active-preload");
-          }
+        // 所有页面默认关闭侧边栏，除非明确保存了开启状态
+        if (savedState === "true") {
+          document.documentElement.classList.add("sidebar-active-preload");
         }
 
         // 预渲染子菜单状态
@@ -63,6 +53,63 @@
             JSON.stringify(submenuStates)
           );
         }
+      })();
+    </script>
+    <!-- 立即执行背景类设置，避免导航栏闪烁 -->
+    <script>
+      (function () {
+        // 使用requestAnimationFrame确保在body渲染后立即设置背景类
+        function setBackgroundClass() {
+          const body = document.body;
+          if (!body) {
+            // 如果body还不存在，使用requestAnimationFrame等待下一帧
+            requestAnimationFrame(setBackgroundClass);
+            return;
+          }
+
+          const isMobile =
+            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+              navigator.userAgent
+            );
+          const pcBgType = body.getAttribute("data-pc-bg-type");
+          const pcBgUrl = body.getAttribute("data-pc-bg-url");
+          const mobileBgType = body.getAttribute("data-mobile-bg-type");
+          const mobileBgUrl = body.getAttribute("data-mobile-bg-url");
+          const html = document.documentElement;
+
+          // 移除所有背景相关的类
+          body.classList.remove(
+            "bg-none",
+            "bg-image",
+            "bg-gradient",
+            "bg-color"
+          );
+
+          // 根据设备类型选择背景
+          if (isMobile && mobileBgType && mobileBgUrl) {
+            body.classList.add("bg-" + mobileBgType);
+            if (mobileBgType === "image") {
+              const mobileBg = document.querySelector(".mobile-bg");
+              if (mobileBg) {
+                mobileBg.style.backgroundImage = `url("${mobileBgUrl}")`;
+              }
+            }
+          } else if (pcBgType && pcBgUrl) {
+            body.classList.add("bg-" + pcBgType);
+            if (pcBgType === "image") {
+              html.style.setProperty("--bg-image", `url("${pcBgUrl}")`);
+            } else if (pcBgType === "gradient") {
+              html.style.setProperty("--bg-gradient", pcBgUrl);
+            } else if (pcBgType === "color") {
+              html.style.setProperty("--bg-color", pcBgUrl);
+            }
+          } else {
+            body.classList.add("bg-none");
+          }
+        }
+
+        // 立即尝试设置
+        setBackgroundClass();
       })();
     </script>
     <style>

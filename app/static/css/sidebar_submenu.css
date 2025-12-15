@@ -144,9 +144,15 @@
   display: none;
 }
 
-body:not(.bg-none) .sidebar-menu-item.has-submenu .submenu-toggle:hover svg {
-  stroke: #ffd86b;
+/* 背景模式下子菜单切换按钮保持主题色，确保在白色背景下明显 */
+body:not(.bg-none) .sidebar-menu-item.has-submenu .submenu-toggle svg {
+  stroke: #7049f0; /* 保持主题色，在白色背景下明显 */
 }
+
+body:not(.bg-none) .sidebar-menu-item.has-submenu .submenu-toggle:hover svg {
+  stroke: var(--primary-color); /* 悬停时保持主题色 */
+}
+
 body:not(.bg-none) .sidebar-menu-item.has-submenu .submenu-toggle:hover {
-  background: rgba(255, 216, 107, 0.08);
+  background: rgba(112, 73, 240, 0.1); /* 主题色半透明背景 */
 }

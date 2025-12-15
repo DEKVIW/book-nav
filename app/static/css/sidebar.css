@@ -325,40 +325,102 @@ body:not(.bg-none) .sidebar-menu-item a:hover {
 }
 */
 
-/* 使侧边栏更加明显以避免背景干扰 */
+/* 根据data属性判断是否有背景，避免闪烁 */
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar,
 body:not(.bg-none) .sidebar {
-  background-color: rgba(0, 0, 0, 0.4); /* 黑色毛玻璃 */
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.7); /* 白色半透明，与链接卡片一致 */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
 }
 
+/* 文字颜色保持原样，不受背景影响 */
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-menu-link,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-group-title,
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-menu-icon,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-menu-link,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-group-title,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-menu-icon,
 body:not(.bg-none) .sidebar,
 body:not(.bg-none) .sidebar-menu-link,
 body:not(.bg-none) .sidebar-group-title,
 body:not(.bg-none) .sidebar-menu-icon {
-  color: #f3f3f3;
+  color: inherit; /* 保持原有文字颜色 */
 }
 
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-menu-link:hover,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-menu-link:hover,
 body:not(.bg-none) .sidebar-menu-link:hover {
-  color: #ffd86b;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(112, 73, 240, 0.1); /* 主题色半透明背景 */
+  color: var(--primary-color);
 }
 
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-menu-link.active,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-menu-link.active,
 body:not(.bg-none) .sidebar-menu-link.active {
-  color: #ffd86b;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(112, 73, 240, 0.15);
+  color: var(--primary-color);
 }
 
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-submenu-link,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-submenu-link,
 body:not(.bg-none) .sidebar-submenu-link {
-  color: #e0e0e0;
+  color: inherit; /* 保持原有文字颜色 */
 }
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-submenu-link:hover,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-submenu-link:hover,
 body:not(.bg-none) .sidebar-submenu-link:hover {
-  color: #ffd86b;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(112, 73, 240, 0.1);
+  color: var(--primary-color);
 }
+body[data-pc-bg-type]:not([data-pc-bg-type=""]):not([data-pc-bg-type="none"])
+  .sidebar-submenu-link.active,
+body[data-mobile-bg-type]:not([data-mobile-bg-type=""]):not(
+    [data-mobile-bg-type="none"]
+  )
+  .sidebar-submenu-link.active,
 body:not(.bg-none) .sidebar-submenu-link.active {
-  color: #ffd86b;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(112, 73, 240, 0.15);
+  color: var(--primary-color);
 }
 
 .sidebar-drag-handle {

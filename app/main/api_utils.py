@@ -64,25 +64,38 @@ def fetch_website_info():
             settings = SiteSettings.get_settings()
             ai_service = create_ai_service_from_settings(settings)
             
-            if ai_service:
-                current_app.logger.info(f"使用AI生成网站信息: {url}")
-                ai_result = ai_service.generate_website_info(url)
-                
-                # 如果原有结果失败，使用AI结果
+            if not ai_service:
+                current_app.logger.warning(f"AI服务未配置或未启用，无法生成网站信息: {url}")
+                # 如果AI服务不可用，返回原有结果，但添加提示信息
                 if not result.get("success"):
-                    result = {"success": True, "title": "", "description": ""}
-                
-                # 填充缺失的信息
-                if not result.get("title") and ai_result.get("title"):
-                    result["title"] = ai_result["title"]
-                    result["ai_generated_title"] = True
-                
-                if not result.get("description") and ai_result.get("description"):
-                    result["description"] = ai_result["description"]
-                    result["ai_generated_description"] = True
+                    result["message"] = "网站信息获取失败，且AI服务未配置"
+            else:
+                current_app.logger.info(f"使用AI生成网站信息: {url}")
+                try:
+                    ai_result = ai_service.generate_website_info(url)
+                    
+                    # 如果原有结果失败，使用AI结果
+                    if not result.get("success"):
+                        result = {"success": True, "title": "", "description": ""}
+                    
+                    # 填充缺失的信息
+                    if not result.get("title") and ai_result.get("title"):
+                        result["title"] = ai_result["title"]
+                        result["ai_generated_title"] = True
+                    
+                    if not result.get("description") and ai_result.get("description"):
+                        result["description"] = ai_result["description"]
+                        result["ai_generated_description"] = True
+                except Exception as ai_error:
+                    current_app.logger.error(f"AI生成网站信息失败: {str(ai_error)}", exc_info=True)
+                    # AI失败不影响原有逻辑，但记录详细错误
+                    if not result.get("success"):
+                        result["message"] = f"网站信息获取失败，AI生成也失败: {str(ai_error)}"
         except Exception as e:
-            current_app.logger.warning(f"AI生成网站信息失败: {str(e)}")
+            current_app.logger.error(f"AI生成网站信息异常: {str(e)}", exc_info=True)
             # AI失败不影响原有逻辑
+            if not result.get("success"):
+                result["message"] = f"AI生成过程出错: {str(e)}"
     
     icon_result = get_website_icon(url)
     if icon_result["success"]:

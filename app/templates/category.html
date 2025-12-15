@@ -446,6 +446,8 @@ DEBUG - Settings信息:
 <div class="main-content" id="mainContent">
   <div class="content-container mt-4">
     <!-- 分类信息和搜索区域 -->
+    {# 如果是一级分类且有子分类，且当前显示的是未分类的网站，则不显示分类标题 #}
+    {% if not (category.parent_id is none and category.children and uncategorized_count and uncategorized_count > 0) %}
     <div class="category-card">
       <div class="category-info">
         <div
@@ -490,6 +492,7 @@ DEBUG - Settings信息:
         </div>
       </div>
     </div>
+    {% endif %}
 
     <!-- 搜索状态提示 -->
     <div id="searchStatus" class="search-status">
@@ -505,6 +508,64 @@ DEBUG - Settings信息:
         <i class="bi bi-arrow-left me-1"></i>返回全部
       </button>
     </div>
+
+    <!-- 子分类标签导航 -->
+    {# 如果是一级分类且有子分类，且当前显示的是未分类的网站，则不显示子分类标签导航 #}
+    {% if category.children and not (category.parent_id is none and uncategorized_count and uncategorized_count > 0) %}
+    {# 如果是一级分类且有子分类，显示子分类标签和"未分类"标签 #}
+    <div class="subcategory-tags mb-4">
+      {% for child in category.children %}
+      <a
+        href="{{ url_for('main.category', id=child.id) }}"
+        class="subcategory-tag"
+      >
+        <span
+          class="tag-icon"
+          style="background-color: {{ child.color or '#6c757d' }}"
+        >
+          <i class="bi bi-{{ child.icon or 'tag' }}"></i>
+        </span>
+        {{ child.name }}
+        <span class="subcategory-count">{{ child.total_count }}</span>
+      </a>
+      {% endfor %}
+      {# 如果有未分类的链接，显示"未分类"标签 #}
+      {% if uncategorized_count and uncategorized_count > 0 %}
+      <a
+        href="{{ url_for('main.category', id=category.id) }}"
+        class="subcategory-tag"
+      >
+        <span
+          class="tag-icon"
+          style="background-color: {{ category.color or '#6c757d' }}"
+        >
+          <i class="bi bi-folder-x"></i>
+        </span>
+        未分类
+        <span class="subcategory-count">{{ uncategorized_count }}</span>
+      </a>
+      {% endif %}
+    </div>
+    {% elif siblings %}
+    {# 如果是子分类，显示同级分类标签（兄弟分类） #}
+    <div class="subcategory-tags mb-4">
+      {% for sibling in siblings %}
+      <a
+        href="{{ url_for('main.category', id=sibling.id) }}"
+        class="subcategory-tag {% if sibling.id == category.id %}active{% endif %}"
+      >
+        <span
+          class="tag-icon"
+          style="background-color: {{ sibling.color or '#6c757d' }}"
+        >
+          <i class="bi bi-{{ sibling.icon or 'tag' }}"></i>
+        </span>
+        {{ sibling.name }}
+        <span class="subcategory-count">{{ sibling.total_count }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     <!-- 网站卡片容器 -->
     <div
