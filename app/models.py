@@ -248,6 +248,17 @@ class SiteSettings(db.Model):
     vector_similarity_threshold = db.Column(db.Float, default=0.3)  # 向量相似度阈值
     vector_max_results = db.Column(db.Integer, default=50)  # 向量搜索最大结果数
     
+    # WebDAV 云端备份配置
+    webdav_url = db.Column(db.String(512), nullable=True)  # WebDAV 服务器地址
+    webdav_username = db.Column(db.String(256), nullable=True)  # WebDAV 用户名
+    webdav_password = db.Column(db.String(512), nullable=True)  # WebDAV 密码（加密存储）
+    webdav_path = db.Column(db.String(512), default='/nav_backups/')  # 远端备份目录路径
+    webdav_auto_backup = db.Column(db.Boolean, default=False)  # 是否启用自动备份
+    webdav_backup_interval = db.Column(db.Integer, default=24)  # 自动备份间隔（小时）
+    webdav_backup_keep_count = db.Column(db.Integer, default=10)  # 远端保留备份份数
+    webdav_last_backup_time = db.Column(db.DateTime, nullable=True)  # 上次自动备份时间
+    webdav_last_backup_status = db.Column(db.String(256), nullable=True)  # 上次备份状态信息
+    
     @staticmethod
     def get_default_qdrant_url():
         """

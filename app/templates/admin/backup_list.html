@@ -1,125 +1,767 @@
-{% extends "admin/base.html" %} {% block admin_content %}
+{% extends "admin/base.html" %}
+
+{% block admin_head %}
+<style>
+  /* ========== 备份管理页面样式 ========== */
+  
+  /* 标签页样式增强 */
+  #backupTabs .nav-link {
+    color: #6c757d;
+    font-weight: 500;
+    border: none;
+    padding: 0.75rem 1.25rem;
+    transition: all 0.2s;
+  }
+  #backupTabs .nav-link:hover {
+    color: #495057;
+    background-color: rgba(0,0,0,0.03);
+  }
+  #backupTabs .nav-link.active {
+    color: #0d6efd;
+    border-bottom: 2px solid #0d6efd;
+    background-color: transparent;
+  }
+  #backupTabs .nav-link i {
+    margin-right: 0.35rem;
+  }
+
+  /* 配置区域折叠样式 */
+  .config-toggle {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+  }
+  .config-toggle:hover {
+    background-color: rgba(0,0,0,0.02);
+  }
+  .config-toggle .toggle-icon {
+    transition: transform 0.3s;
+  }
+  .config-toggle.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+  }
+
+  /* 状态卡片 */
+  .status-card {
+    border-left: 4px solid #6c757d;
+    background: #f8f9fa;
+    padding: 1rem 1.25rem;
+    border-radius: 0.25rem;
+    margin-bottom: 1rem;
+  }
+  .status-card.status-success { border-left-color: #198754; }
+  .status-card.status-failed { border-left-color: #dc3545; }
+  .status-card.status-none { border-left-color: #6c757d; }
+  .status-card .status-icon { font-size: 1.5rem; margin-right: 0.75rem; }
+  .status-card .status-label { font-size: 0.8rem; color: #6c757d; }
+  .status-card .status-text { font-weight: 500; }
+
+  /* 按钮组间距 */
+  .action-btns .btn { margin-right: 0.35rem; margin-bottom: 0.35rem; }
+
+  /* 密码可见切换 */
+  .password-toggle {
+    cursor: pointer;
+    border: 1px solid #ced4da;
+    background: #fff;
+  }
+  .password-toggle:hover { background: #f8f9fa; }
+
+  /* 远端文件表格 */
+  .remote-files-loading {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+  }
+
+  /* 操作按钮尺寸统一 */
+  .table .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+  
+  /* 移动端适配 */
+  @media (max-width: 768px) {
+    #backupTabs .nav-link { padding: 0.5rem 0.75rem; font-size: 0.9rem; }
+    .table { font-size: 0.85rem; }
+    .status-card { padding: 0.75rem 1rem; }
+  }
+</style>
+{% endblock %}
+
+{% block admin_content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2><i class="bi bi-archive"></i> 备份管理</h2>
-  <a href="{{ url_for('admin.backup_data') }}" class="btn btn-primary">
-    <i class="bi bi-database-add"></i> 立即备份
-  </a>
 </div>
 
-<!-- 备份列表 -->
-<div class="card mb-4">
-  <div class="card-header">
-    <i class="bi bi-database-fill-check"></i> 备份列表
-  </div>
-  <div class="card-body">
-    {% if backups %}
-    <div class="table-responsive">
-      <table class="table table-hover table-striped">
-        <thead>
-          <tr>
-            <th>序号</th>
-            <th>数据库文件名</th>
-            <th>备份时间</th>
-            <th>数据库大小</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for backup in backups %}
-          <tr>
-            <td>{{ loop.index0 }}</td>
-            <td>{{ backup.filename }}</td>
-            <td>{{ backup.time_display }}</td>
-            <td>{{ backup.size_display }}</td>
-            <td>
-              <form
-                method="post"
-                action="{{ url_for('admin.restore_backup', filename=backup.filename) }}"
-                class="d-inline confirm-form"
-                data-message="确定要回滚到此备份？此操作会覆盖当前数据！"
-              >
-                <input
-                  type="hidden"
-                  name="csrf_token"
-                  value="{{ csrf_token() }}"
-                />
-                <button type="submit" class="btn btn-sm btn-info">
-                  <i class="bi bi-arrow-counterclockwise"></i> 回滚
-                </button>
-              </form>
+<!-- 标签页导航 -->
+<ul class="nav nav-tabs mb-0" id="backupTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="local-tab" data-bs-toggle="tab"
+            data-bs-target="#local" type="button" role="tab"
+            aria-controls="local" aria-selected="true">
+      <i class="bi bi-hdd"></i> 本地备份
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="cloud-tab" data-bs-toggle="tab"
+            data-bs-target="#cloud" type="button" role="tab"
+            aria-controls="cloud" aria-selected="false">
+      <i class="bi bi-cloud"></i> 云端备份 (WebDAV)
+    </button>
+  </li>
+</ul>
 
-              <a
-                href="{{ url_for('admin.download_backup', filename=backup.filename) }}"
-                class="btn btn-sm btn-success"
-              >
-                <i class="bi bi-download"></i> 下载
-              </a>
+<!-- 标签页内容 -->
+<div class="tab-content" id="backupTabContent">
 
-              <form
-                method="post"
-                action="{{ url_for('admin.delete_backup', filename=backup.filename) }}"
-                class="d-inline confirm-form"
-                data-message="确定要删除此备份？"
-              >
-                <input
-                  type="hidden"
-                  name="csrf_token"
-                  value="{{ csrf_token() }}"
-                />
-                <button type="submit" class="btn btn-sm btn-danger">
-                  <i class="bi bi-trash"></i> 删除
-                </button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <!-- ==================== 本地备份标签 ==================== -->
+  <div class="tab-pane fade show active" id="local" role="tabpanel" aria-labelledby="local-tab">
+    <div class="card border-top-0" style="border-top-left-radius: 0; border-top-right-radius: 0;">
+      <div class="card-body">
+        <!-- 操作栏 -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="text-muted small">共 {{ backups|length }} 个本地备份</span>
+          <a href="{{ url_for('admin.backup_data') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-database-add me-1"></i> 立即备份
+          </a>
+        </div>
+
+        {% if backups %}
+        <div class="table-responsive">
+          <table class="table table-hover table-striped mb-0">
+            <thead>
+              <tr>
+                <th style="width: 40px">#</th>
+                <th>文件名</th>
+                <th>备份时间</th>
+                <th>大小</th>
+                <th style="min-width: 230px">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for backup in backups %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td><code class="small">{{ backup.filename }}</code></td>
+                <td>{{ backup.time_display }}</td>
+                <td>{{ backup.size_display }}</td>
+                <td class="action-btns">
+                  <form method="post"
+                        action="{{ url_for('admin.restore_backup', filename=backup.filename) }}"
+                        class="d-inline confirm-form"
+                        data-message="确定要回滚到此备份？此操作会覆盖当前数据！">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-sm btn-outline-info" title="回滚">
+                      <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                  </form>
+                  <a href="{{ url_for('admin.download_backup', filename=backup.filename) }}"
+                     class="btn btn-sm btn-outline-success" title="下载">
+                    <i class="bi bi-download"></i>
+                  </a>
+                  <button type="button" class="btn btn-sm btn-outline-primary upload-to-cloud-btn"
+                          data-filename="{{ backup.filename }}" title="上传到云端">
+                    <i class="bi bi-cloud-upload"></i>
+                  </button>
+                  <form method="post"
+                        action="{{ url_for('admin.delete_backup', filename=backup.filename) }}"
+                        class="d-inline confirm-form"
+                        data-message="确定要删除此备份？">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="删除">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          暂无备份文件，点击"立即备份"创建新备份。
+        </div>
+        {% endif %}
+      </div>
     </div>
-    {% else %}
-    <div class="alert alert-info">
-      <i class="bi bi-info-circle"></i>
-      暂无备份文件，点击"立即备份"创建新备份。
+
+    <!-- 备份说明 -->
+    <div class="card mt-3">
+      <div class="card-header py-2"><i class="bi bi-info-circle me-1"></i> 说明</div>
+      <div class="card-body py-2">
+        <ul class="mb-0 small">
+          <li><strong>回滚</strong> - 使用备份替换当前数据库（会覆盖现有数据）</li>
+          <li><strong>下载</strong> - 下载备份文件到本地电脑</li>
+          <li><strong><i class="bi bi-cloud-upload"></i></strong> - 将备份上传到已配置的 WebDAV 云端</li>
+        </ul>
+      </div>
     </div>
-    {% endif %}
   </div>
+
+  <!-- ==================== 云端备份标签 ==================== -->
+  <div class="tab-pane fade" id="cloud" role="tabpanel" aria-labelledby="cloud-tab">
+    <div class="card border-top-0" style="border-top-left-radius: 0; border-top-right-radius: 0;">
+      <div class="card-body">
+
+        <!-- 最后备份状态 -->
+        <div id="webdavStatusCard" class="status-card status-none d-flex align-items-center">
+          <div class="status-icon" id="statusIcon"><i class="bi bi-cloud-slash"></i></div>
+          <div>
+            <div class="status-label">云端备份状态</div>
+            <div class="status-text" id="statusText">加载中...</div>
+            <div class="small text-muted" id="statusTime"></div>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="d-flex gap-2 mb-4">
+          <button type="button" class="btn btn-primary btn-sm" id="btnCloudBackupNow">
+            <i class="bi bi-cloud-arrow-up me-1"></i> 立即备份到云端
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefreshRemote">
+            <i class="bi bi-arrow-clockwise me-1"></i> 刷新列表
+          </button>
+        </div>
+
+        <!-- WebDAV 配置（可折叠） -->
+        <div class="card mb-4">
+          <div class="card-header py-2 config-toggle d-flex justify-content-between align-items-center"
+               data-bs-toggle="collapse" data-bs-target="#webdavConfigBody" aria-expanded="false">
+            <span><i class="bi bi-gear me-1"></i> WebDAV 云端配置 & 自动备份设置</span>
+            <i class="bi bi-chevron-down toggle-icon"></i>
+          </div>
+          <div class="collapse" id="webdavConfigBody">
+            <div class="card-body">
+              <div class="row">
+                <!-- 左列：连接配置 -->
+                <div class="col-lg-6">
+                  <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-1"></i> 连接配置</h6>
+
+                  <div class="mb-3">
+                    <label class="form-label fw-bold small">WebDAV 服务器地址</label>
+                    <input type="text" class="form-control form-control-sm" id="webdavUrl"
+                           placeholder="https://dav.jianguoyun.com/dav/"
+                           value="{{ settings.webdav_url or '' }}">
+                    <div class="form-text">
+                      坚果云: <code>https://dav.jianguoyun.com/dav/</code>，
+                      NextCloud: <code>https://你的域名/remote.php/dav/files/用户名/</code>
+                    </div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label fw-bold small">用户名</label>
+                    <input type="text" class="form-control form-control-sm" id="webdavUsername"
+                           placeholder="your_username"
+                           value="{{ settings.webdav_username or '' }}">
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label fw-bold small">密码 / 应用密码</label>
+                    <div class="input-group input-group-sm">
+                      <input type="password" class="form-control" id="webdavPassword"
+                             placeholder="{% if settings.webdav_password %}••••••••（已保存，留空不修改）{% else %}请输入密码{% endif %}"
+                             value="">
+                      <button class="password-toggle input-group-text" type="button" id="togglePassword">
+                        <i class="bi bi-eye"></i>
+                      </button>
+                    </div>
+                    <div class="form-text">
+                      坚果云请使用<strong>应用密码</strong>（在坚果云设置 → 安全选项 → 第三方应用管理中生成）
+                    </div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label fw-bold small">备份目录路径</label>
+                    <input type="text" class="form-control form-control-sm" id="webdavPath"
+                           placeholder="/nav_backups/"
+                           value="{{ settings.webdav_path or '/nav_backups/' }}">
+                    <div class="form-text">远端存储备份文件的目录，不存在会自动创建</div>
+                  </div>
+
+                  <!-- 测试 & 保存按钮 -->
+                  <div class="d-flex gap-2 mb-3">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnTestWebdav">
+                      <i class="bi bi-plug me-1"></i> 测试连接
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnSaveWebdav">
+                      <i class="bi bi-check-lg me-1"></i> 保存配置
+                    </button>
+                  </div>
+                  <div id="webdavTestResult" style="display:none;"></div>
+                </div>
+
+                <!-- 右列：自动备份设置 -->
+                <div class="col-lg-6">
+                  <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-1"></i> 自动备份设置</h6>
+
+                  <div class="mb-3">
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="webdavAutoBackup"
+                             {% if settings.webdav_auto_backup %}checked{% endif %}>
+                      <label class="form-check-label" for="webdavAutoBackup">
+                        启用自动备份
+                      </label>
+                    </div>
+                    <div class="form-text">开启后将按设定间隔自动备份数据库到云端</div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label fw-bold small">备份间隔</label>
+                    <select class="form-select form-select-sm" id="webdavBackupInterval">
+                      <option value="6" {% if settings.webdav_backup_interval == 6 %}selected{% endif %}>每 6 小时</option>
+                      <option value="12" {% if settings.webdav_backup_interval == 12 %}selected{% endif %}>每 12 小时</option>
+                      <option value="24" {% if (settings.webdav_backup_interval or 24) == 24 %}selected{% endif %}>每天（24小时）</option>
+                      <option value="72" {% if settings.webdav_backup_interval == 72 %}selected{% endif %}>每 3 天</option>
+                      <option value="168" {% if settings.webdav_backup_interval == 168 %}selected{% endif %}>每周（7天）</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label fw-bold small">远端保留份数</label>
+                    <input type="number" class="form-control form-control-sm" id="webdavKeepCount"
+                           min="1" max="100"
+                           value="{{ settings.webdav_backup_keep_count or 10 }}">
+                    <div class="form-text">超出此数量的旧备份会被自动删除</div>
+                  </div>
+
+                  <!-- 配置状态 -->
+                  {% if settings.webdav_url and settings.webdav_username and settings.webdav_password %}
+                  <div class="alert alert-success small py-2 mb-0">
+                    <i class="bi bi-check-circle me-1"></i>
+                    WebDAV 已配置 — <code>{{ settings.webdav_url }}</code>
+                  </div>
+                  {% else %}
+                  <div class="alert alert-warning small py-2 mb-0">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    WebDAV 未配置，请填写左侧连接信息
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <!-- 使用说明 -->
+              <div class="alert alert-info small mt-3 mb-0">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>常见 WebDAV 服务配置：</strong>
+                <ul class="mb-0 mt-1">
+                  <li><strong>坚果云</strong>：地址 <code>https://dav.jianguoyun.com/dav/</code>，使用应用密码</li>
+                  <li><strong>NextCloud</strong>：地址 <code>https://域名/remote.php/dav/files/用户名/</code></li>
+                  <li><strong>群晖 NAS</strong>：地址 <code>https://IP:5006</code> 或 <code>http://IP:5005</code></li>
+                  <li><strong>InfiniCLOUD</strong>：地址 <code>https://dav.teracloud.jp/dav/</code></li>
+                  <li><strong>Alist</strong>：地址 <code>http://IP:端口/dav/</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 远端备份列表 -->
+        <h6 class="fw-bold mb-3"><i class="bi bi-cloud me-1"></i> 云端备份列表</h6>
+        <div id="remoteFilesContainer">
+          <div class="remote-files-loading" id="remoteLoading">
+            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+            正在加载远端备份列表...
+          </div>
+          <div id="remoteFilesContent" style="display:none;"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
 </div>
+{% endblock %}
 
-<!-- 备份说明 -->
-<div class="card mb-4">
-  <div class="card-header"><i class="bi bi-info-circle"></i> 备份说明</div>
-  <div class="card-body">
-    <ul>
-      <li>
-        <strong>立即备份</strong> - 创建当前数据库的完整备份，包括所有数据
-      </li>
-      <li>
-        <strong>回滚</strong> - 使用选中的备份替换当前数据库，会覆盖现有数据
-      </li>
-      <li><strong>下载</strong> - 下载备份文件到本地，可用于异地备份</li>
-      <li><strong>删除</strong> - 删除选中的备份文件</li>
-    </ul>
-    <div class="alert alert-warning">
-      <i class="bi bi-exclamation-triangle"></i> <strong>注意：</strong>
-      回滚操作会直接替换当前数据库，进行此操作前请确保已了解潜在风险。
-    </div>
-  </div>
-</div>
-{% endblock %} {% block admin_scripts %}
+{% block admin_scripts %}
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    // 确认对话框
-    document.querySelectorAll(".confirm-form").forEach((form) => {
-      form.addEventListener("submit", function (e) {
-        e.preventDefault();
-        const message =
-          this.getAttribute("data-message") || "确定要执行此操作？";
+document.addEventListener("DOMContentLoaded", function () {
+  // ========== CSRF Token ==========
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
 
-        if (confirm(message)) {
-          this.submit();
-        }
+  // ========== 确认对话框 ==========
+  document.querySelectorAll(".confirm-form").forEach((form) => {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const message = this.getAttribute("data-message") || "确定要执行此操作？";
+      if (confirm(message)) { this.submit(); }
+    });
+  });
+
+  // ========== 密码显示切换 ==========
+  const togglePasswordBtn = document.getElementById("togglePassword");
+  const passwordInput = document.getElementById("webdavPassword");
+  if (togglePasswordBtn && passwordInput) {
+    togglePasswordBtn.addEventListener("click", function () {
+      const type = passwordInput.type === "password" ? "text" : "password";
+      passwordInput.type = type;
+      this.querySelector("i").classList.toggle("bi-eye");
+      this.querySelector("i").classList.toggle("bi-eye-slash");
+    });
+  }
+
+  // ========== 配置折叠图标 ==========
+  const configToggle = document.querySelector(".config-toggle");
+  if (configToggle) {
+    const collapseEl = document.getElementById("webdavConfigBody");
+    collapseEl.addEventListener("show.bs.collapse", function () {
+      configToggle.classList.remove("collapsed");
+    });
+    collapseEl.addEventListener("hide.bs.collapse", function () {
+      configToggle.classList.add("collapsed");
+    });
+    // 初始状态设为 collapsed
+    configToggle.classList.add("collapsed");
+  }
+
+  // ========== 通用通知函数 ==========
+  function showNotification(message, type) {
+    const notification = document.getElementById("custom-notification");
+    const content = document.getElementById("custom-notification-content");
+    if (notification && content) {
+      notification.className = "animate__animated animate__fadeIn " + type;
+      content.textContent = message;
+      notification.style.display = "block";
+      setTimeout(() => {
+        notification.classList.remove("animate__fadeIn");
+        notification.classList.add("animate__fadeOut");
+        setTimeout(() => { notification.style.display = "none"; }, 500);
+      }, 3000);
+    }
+  }
+
+  // ========== 获取表单值 ==========
+  function getConfigValues() {
+    return {
+      webdav_url: document.getElementById("webdavUrl").value.trim(),
+      webdav_username: document.getElementById("webdavUsername").value.trim(),
+      webdav_password: document.getElementById("webdavPassword").value,
+      webdav_path: document.getElementById("webdavPath").value.trim() || "/nav_backups/",
+      webdav_auto_backup: document.getElementById("webdavAutoBackup").checked,
+      webdav_backup_interval: parseInt(document.getElementById("webdavBackupInterval").value),
+      webdav_backup_keep_count: parseInt(document.getElementById("webdavKeepCount").value) || 10
+    };
+  }
+
+  // ========== 保存配置 ==========
+  document.getElementById("btnSaveWebdav").addEventListener("click", function () {
+    const btn = this;
+    const data = getConfigValues();
+
+    if (!data.webdav_url || !data.webdav_username) {
+      showNotification("请至少填写 WebDAV 地址和用户名", "warning");
+      return;
+    }
+
+    // 如果密码为空且之前没有保存过密码
+    {% if not settings.webdav_password %}
+    if (!data.webdav_password) {
+      showNotification("首次配置请输入密码", "warning");
+      return;
+    }
+    {% endif %}
+
+    // 如果密码为空，传掩码标记（不修改）
+    if (!data.webdav_password) {
+      data.webdav_password = "****unchanged****";
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> 保存中...';
+
+    fetch("{{ url_for('admin.webdav_save_config') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+      showNotification(res.message, res.success ? "success" : "danger");
+      if (res.success) {
+        // 清空密码输入框，显示已保存提示
+        passwordInput.value = "";
+        passwordInput.placeholder = "••••••••（已保存，留空不修改）";
+      }
+    })
+    .catch(err => { showNotification("保存失败: " + err.message, "danger"); })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> 保存配置';
+    });
+  });
+
+  // ========== 测试连接 ==========
+  document.getElementById("btnTestWebdav").addEventListener("click", function () {
+    const btn = this;
+    const data = getConfigValues();
+    const resultDiv = document.getElementById("webdavTestResult");
+
+    if (!data.webdav_url || !data.webdav_username) {
+      resultDiv.innerHTML = '<div class="alert alert-warning small py-2 mt-2">请填写 WebDAV 地址和用户名</div>';
+      resultDiv.style.display = "block";
+      return;
+    }
+
+    // 如果密码为空，传掩码
+    if (!data.webdav_password) {
+      data.webdav_password = "****unchanged****";
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> 测试中...';
+    resultDiv.innerHTML = '<div class="alert alert-info small py-2 mt-2"><i class="bi bi-hourglass-split me-1"></i> 正在测试连接...</div>';
+    resultDiv.style.display = "block";
+
+    fetch("{{ url_for('admin.webdav_test') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+      const cls = res.success ? "alert-success" : "alert-danger";
+      const icon = res.success ? "bi-check-circle" : "bi-x-circle";
+      resultDiv.innerHTML = '<div class="alert ' + cls + ' small py-2 mt-2"><i class="bi ' + icon + ' me-1"></i> ' + res.message + '</div>';
+    })
+    .catch(err => {
+      resultDiv.innerHTML = '<div class="alert alert-danger small py-2 mt-2">测试失败: ' + err.message + '</div>';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plug me-1"></i> 测试连接';
+    });
+  });
+
+  // ========== 立即备份到云端 ==========
+  document.getElementById("btnCloudBackupNow").addEventListener("click", function () {
+    const btn = this;
+    if (!confirm("确定要创建新备份并上传到云端？")) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> 备份中...';
+
+    fetch("{{ url_for('admin.webdav_backup_now') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken }
+    })
+    .then(r => r.json())
+    .then(res => {
+      showNotification(res.message, res.success ? "success" : "danger");
+      if (res.success) {
+        loadRemoteFiles();
+        loadBackupStatus();
+      }
+    })
+    .catch(err => { showNotification("备份失败: " + err.message, "danger"); })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> 立即备份到云端';
+    });
+  });
+
+  // ========== 刷新远端列表 ==========
+  document.getElementById("btnRefreshRemote").addEventListener("click", function () {
+    loadRemoteFiles();
+  });
+
+  // ========== 上传本地备份到云端 ==========
+  document.querySelectorAll(".upload-to-cloud-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const filename = this.getAttribute("data-filename");
+      if (!confirm("确定要将 " + filename + " 上传到云端？")) return;
+
+      const originalHtml = this.innerHTML;
+      this.disabled = true;
+      this.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+      fetch("{{ url_for('admin.webdav_upload', filename='__FILENAME__') }}".replace("__FILENAME__", filename), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken }
+      })
+      .then(r => r.json())
+      .then(res => {
+        showNotification(res.message, res.success ? "success" : "danger");
+        if (res.success) { loadRemoteFiles(); }
+      })
+      .catch(err => { showNotification("上传失败: " + err.message, "danger"); })
+      .finally(() => {
+        this.disabled = false;
+        this.innerHTML = originalHtml;
       });
     });
   });
+
+  // ========== 加载远端文件列表 ==========
+  function loadRemoteFiles() {
+    const loading = document.getElementById("remoteLoading");
+    const content = document.getElementById("remoteFilesContent");
+    loading.style.display = "block";
+    content.style.display = "none";
+
+    fetch("{{ url_for('admin.webdav_list') }}")
+    .then(r => r.json())
+    .then(res => {
+      loading.style.display = "none";
+      content.style.display = "block";
+
+      if (!res.success) {
+        content.innerHTML = '<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle me-1"></i> ' + (res.message || "获取失败") + '</div>';
+        return;
+      }
+
+      const files = res.files || [];
+      if (files.length === 0) {
+        content.innerHTML = '<div class="alert alert-info small py-2 mb-0"><i class="bi bi-info-circle me-1"></i> 云端暂无备份文件</div>';
+        return;
+      }
+
+      let html = '<div class="table-responsive"><table class="table table-hover table-striped table-sm mb-0">';
+      html += '<thead><tr><th>#</th><th>文件名</th><th>修改时间</th><th>大小</th><th>操作</th></tr></thead><tbody>';
+      
+      files.forEach(function (f, idx) {
+        html += '<tr>';
+        html += '<td>' + (idx + 1) + '</td>';
+        html += '<td><code class="small">' + escapeHtml(f.name) + '</code></td>';
+        html += '<td>' + escapeHtml(f.modified_display || f.modified || '-') + '</td>';
+        html += '<td>' + escapeHtml(f.size_display || '-') + '</td>';
+        html += '<td class="action-btns">';
+        html += '<button class="btn btn-sm btn-outline-success remote-download-btn" data-filename="' + escapeHtml(f.name) + '" title="下载到本地"><i class="bi bi-download"></i></button> ';
+        html += '<button class="btn btn-sm btn-outline-danger remote-delete-btn" data-filename="' + escapeHtml(f.name) + '" title="删除"><i class="bi bi-trash"></i></button>';
+        html += '</td></tr>';
+      });
+      
+      html += '</tbody></table></div>';
+      content.innerHTML = html;
+
+      // 绑定远端文件操作按钮
+      bindRemoteButtons();
+    })
+    .catch(err => {
+      loading.style.display = "none";
+      content.style.display = "block";
+      content.innerHTML = '<div class="alert alert-danger small py-2">加载失败: ' + err.message + '</div>';
+    });
+  }
+
+  // ========== 绑定远端文件操作按钮 ==========
+  function bindRemoteButtons() {
+    // 下载到本地
+    document.querySelectorAll(".remote-download-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const filename = this.getAttribute("data-filename");
+        const originalHtml = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        fetch("{{ url_for('admin.webdav_download', filename='__FILENAME__') }}".replace("__FILENAME__", filename), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken }
+        })
+        .then(r => r.json())
+        .then(res => {
+          showNotification(res.message, res.success ? "success" : "danger");
+          if (res.success) {
+            showNotification("已下载到本地备份列表，刷新页面可见", "success");
+          }
+        })
+        .catch(err => { showNotification("下载失败: " + err.message, "danger"); })
+        .finally(() => {
+          this.disabled = false;
+          this.innerHTML = originalHtml;
+        });
+      });
+    });
+
+    // 删除远端文件
+    document.querySelectorAll(".remote-delete-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const filename = this.getAttribute("data-filename");
+        if (!confirm("确定要删除云端备份 " + filename + "？")) return;
+
+        const originalHtml = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        fetch("{{ url_for('admin.webdav_delete', filename='__FILENAME__') }}".replace("__FILENAME__", filename), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken }
+        })
+        .then(r => r.json())
+        .then(res => {
+          showNotification(res.message, res.success ? "success" : "danger");
+          if (res.success) { loadRemoteFiles(); }
+        })
+        .catch(err => { showNotification("删除失败: " + err.message, "danger"); })
+        .finally(() => {
+          this.disabled = false;
+          this.innerHTML = originalHtml;
+        });
+      });
+    });
+  }
+
+  // ========== 加载备份状态 ==========
+  function loadBackupStatus() {
+    fetch("{{ url_for('admin.webdav_status') }}")
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) return;
+
+      const card = document.getElementById("webdavStatusCard");
+      const icon = document.getElementById("statusIcon");
+      const text = document.getElementById("statusText");
+      const time = document.getElementById("statusTime");
+
+      card.className = "status-card d-flex align-items-center";
+
+      if (res.status_type === "success") {
+        card.classList.add("status-success");
+        icon.innerHTML = '<i class="bi bi-cloud-check text-success"></i>';
+      } else if (res.status_type === "failed") {
+        card.classList.add("status-failed");
+        icon.innerHTML = '<i class="bi bi-cloud-slash text-danger"></i>';
+      } else {
+        card.classList.add("status-none");
+        icon.innerHTML = '<i class="bi bi-cloud-slash text-muted"></i>';
+      }
+
+      text.textContent = res.status_message || "从未备份";
+      
+      if (res.last_backup_time) {
+        time.textContent = "上次备份: " + res.last_backup_time;
+        if (res.auto_backup_enabled) {
+          time.textContent += " | 自动备份: 每" + res.backup_interval + "小时";
+        }
+      } else {
+        time.textContent = res.auto_backup_enabled ? "自动备份已开启，等待首次执行" : "";
+      }
+    })
+    .catch(() => {});
+  }
+
+  // ========== HTML 转义 ==========
+  function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ========== 标签切换时加载数据 ==========
+  const cloudTab = document.getElementById("cloud-tab");
+  if (cloudTab) {
+    cloudTab.addEventListener("shown.bs.tab", function () {
+      loadRemoteFiles();
+      loadBackupStatus();
+    });
+  }
+
+  // ========== 如果 URL 带 tab=cloud，自动切换到云端标签 ==========
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("tab") === "cloud") {
+    const tab = new bootstrap.Tab(cloudTab);
+    tab.show();
+  }
+});
 </script>
 {% endblock %}

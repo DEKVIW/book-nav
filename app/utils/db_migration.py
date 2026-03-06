@@ -79,8 +79,21 @@ def migrate_site_settings_fields(db_path: str) -> int:
             ('mobile_background_url', 'VARCHAR(512)')
         ]
         
+        # WebDAV 云端备份字段
+        webdav_fields = [
+            ('webdav_url', 'VARCHAR(512)'),
+            ('webdav_username', 'VARCHAR(256)'),
+            ('webdav_password', 'VARCHAR(512)'),
+            ('webdav_path', "VARCHAR(512) DEFAULT '/nav_backups/'"),
+            ('webdav_auto_backup', 'BOOLEAN DEFAULT 0'),
+            ('webdav_backup_interval', 'INTEGER DEFAULT 24'),
+            ('webdav_backup_keep_count', 'INTEGER DEFAULT 10'),
+            ('webdav_last_backup_time', 'DATETIME'),
+            ('webdav_last_backup_status', 'VARCHAR(256)')
+        ]
+        
         # 合并所有需要检查的字段
-        all_fields = ai_fields + vector_fields + transition_fields + announcement_fields + background_fields
+        all_fields = ai_fields + vector_fields + transition_fields + announcement_fields + background_fields + webdav_fields
         
         added_count = 0
         for field_name, field_def in all_fields:

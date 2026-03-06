@@ -122,6 +122,16 @@ def create_app(config_class=Config):
             print("已将现有管理员升级为超级管理员")
         # 你原本 before_first_request 里的其他初始化逻辑可以放在这里
     
+    # 启动 WebDAV 自动备份线程（仅在主进程中启动，避免 debug reloader 重复启动）
+    try:
+        import os as _os
+        # 在 debug 模式下，只在 reloader 子进程中启动；非 debug 模式直接启动
+        if not app.debug or _os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            from app.admin.backups import start_auto_backup
+            start_auto_backup(app)
+    except Exception as e:
+        print(f"自动备份线程启动警告: {str(e)}")
+    
     # 注册模板过滤器
     @app.template_filter('from_json')
     def from_json(value):
