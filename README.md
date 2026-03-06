@@ -55,6 +55,11 @@ BookNav 基于 Flask Web 框架打造，提供了以下核心功能：
   - 一键抓取图标
   - 一键清空所有数据
   - 备份功能
+- **☁️ WebDAV 云端备份**：
+  - 支持配置多个 WebDAV 云端（坚果云、Alist、NextCloud 等）
+  - 每个云端独立设置自动备份间隔和保留份数
+  - 支持手动备份、远端文件管理（查看、下载、删除）
+  - 备份文件自动压缩为 .zip，密码加密存储
 
 ### 🔐 用户系统
 
@@ -233,10 +238,24 @@ docker-compose up -d
 
    ```bash
    python -m venv venv
-   # Windows
-   venv\Scripts\activate
-   # Linux/Mac
+   ```
+
+   激活虚拟环境：
+
+   ```bash
+   # Windows (PowerShell)
+   .\venv\Scripts\Activate.ps1
+
+   # Windows (CMD)
+   venv\Scripts\activate.bat
+
+   # Linux / macOS
    source venv/bin/activate
+   ```
+
+   安装依赖：
+
+   ```bash
    pip install -r requirements.txt
    ```
 
