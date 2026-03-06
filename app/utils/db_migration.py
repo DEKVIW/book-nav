@@ -1,9 +1,87 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""数据库迁移工具 - 统一处理字段添加"""
+"""数据库迁移工具 - 统一处理字段添加和表创建"""
 
 import sqlite3
 from typing import List, Tuple
+
+
+def migrate_webdav_config_table(db_path: str) -> int:
+    """
+    创建 webdav_config 表（如果不存在），并从 site_settings 迁移旧数据
+    
+    Args:
+        db_path: 数据库文件路径
+        
+    Returns:
+        迁移的记录数
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 创建 webdav_config 表（如果不存在）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS webdav_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(128) NOT NULL DEFAULT '我的云端备份',
+                webdav_url VARCHAR(512),
+                webdav_username VARCHAR(256),
+                webdav_password VARCHAR(512),
+                webdav_path VARCHAR(512) DEFAULT '/nav_backups/',
+                enabled BOOLEAN DEFAULT 1,
+                auto_backup BOOLEAN DEFAULT 0,
+                backup_interval INTEGER DEFAULT 24,
+                backup_keep_count INTEGER DEFAULT 10,
+                last_backup_time DATETIME,
+                last_backup_status VARCHAR(256),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        migrated = 0
+        
+        # 检查 site_settings 中是否有旧的 WebDAV 配置需要迁移
+        cursor.execute("PRAGMA table_info(site_settings)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'webdav_url' in columns:
+            # 检查 webdav_config 表是否已有数据（避免重复迁移）
+            cursor.execute("SELECT COUNT(*) FROM webdav_config")
+            existing_count = cursor.fetchone()[0]
+            
+            if existing_count == 0:
+                # 从 site_settings 读取旧配置
+                cursor.execute("""
+                    SELECT webdav_url, webdav_username, webdav_password, webdav_path,
+                           webdav_auto_backup, webdav_backup_interval, webdav_backup_keep_count,
+                           webdav_last_backup_time, webdav_last_backup_status
+                    FROM site_settings LIMIT 1
+                """)
+                row = cursor.fetchone()
+                
+                if row and row[0]:  # 有 webdav_url 才迁移
+                    cursor.execute("""
+                        INSERT INTO webdav_config 
+                        (name, webdav_url, webdav_username, webdav_password, webdav_path,
+                         enabled, auto_backup, backup_interval, backup_keep_count,
+                         last_backup_time, last_backup_status)
+                        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+                    """, (
+                        '我的云端备份',  # 默认名称
+                        row[0], row[1], row[2], row[3] or '/nav_backups/',
+                        1 if row[4] else 0,
+                        row[5] or 24, row[6] or 10,
+                        row[7], row[8]
+                    ))
+                    migrated = 1
+        
+        conn.commit()
+        conn.close()
+        return migrated
+    except Exception as e:
+        return 0
 
 
 def migrate_site_settings_fields(db_path: str) -> int:

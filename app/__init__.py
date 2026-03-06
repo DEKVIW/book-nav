@@ -37,7 +37,7 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     csrf.init_app(app)
     
-    from app.models import User, InvitationCode, Category, Website, SiteSettings, DeadlinkCheck
+    from app.models import User, InvitationCode, Category, Website, SiteSettings, WebDAVConfig, DeadlinkCheck
     
     from app.auth import bp as auth_bp
     app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -92,11 +92,14 @@ def create_app(config_class=Config):
         db.create_all()
         # 数据库字段迁移（确保新字段自动添加）
         try:
-            from app.utils.db_migration import migrate_site_settings_fields
+            from app.utils.db_migration import migrate_site_settings_fields, migrate_webdav_config_table
             import os
             db_path = app.config.get('SQLALCHEMY_DATABASE_URI', '').replace('sqlite:///', '')
             if db_path and os.path.exists(db_path):
                 migrate_site_settings_fields(db_path)
+                migrated = migrate_webdav_config_table(db_path)
+                if migrated > 0:
+                    print(f"已将旧 WebDAV 配置迁移到 webdav_config 表（{migrated} 条）")
         except Exception as e:
             # 迁移失败不影响应用启动
             print(f"数据库迁移警告: {str(e)}")

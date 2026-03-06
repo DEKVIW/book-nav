@@ -322,6 +322,61 @@ class SiteSettings(db.Model):
         return f'<SiteSettings {self.site_name}>'
 
 
+class WebDAVConfig(db.Model):
+    """WebDAV 云端备份配置（支持多个云端）"""
+    __tablename__ = 'webdav_config'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False, default='我的云端备份')
+    webdav_url = db.Column(db.String(512), nullable=True)
+    webdav_username = db.Column(db.String(256), nullable=True)
+    webdav_password = db.Column(db.String(512), nullable=True)  # 加密存储
+    webdav_path = db.Column(db.String(512), default='/nav_backups/')
+    enabled = db.Column(db.Boolean, default=True)
+    
+    # 自动备份设置
+    auto_backup = db.Column(db.Boolean, default=False)
+    backup_interval = db.Column(db.Integer, default=24)       # 备份间隔（小时）
+    backup_keep_count = db.Column(db.Integer, default=10)     # 远端保留份数
+    last_backup_time = db.Column(db.DateTime, nullable=True)
+    last_backup_status = db.Column(db.String(256), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        """转换为字典用于 JSON 序列化"""
+        status_text = self.last_backup_status or ''
+        status_type = 'none'
+        status_msg = '从未备份'
+        if status_text:
+            parts = status_text.split('|', 1)
+            if len(parts) == 2:
+                status_type = parts[0]
+                status_msg = parts[1]
+            else:
+                status_msg = status_text
+        
+        return {
+            'id': self.id,
+            'name': self.name,
+            'webdav_url': self.webdav_url or '',
+            'webdav_username': self.webdav_username or '',
+            'has_password': bool(self.webdav_password),
+            'webdav_path': self.webdav_path or '/nav_backups/',
+            'enabled': self.enabled,
+            'auto_backup': self.auto_backup,
+            'backup_interval': self.backup_interval or 24,
+            'backup_keep_count': self.backup_keep_count or 10,
+            'last_backup_time': self.last_backup_time.strftime('%Y-%m-%d %H:%M:%S') if self.last_backup_time else '',
+            'status_type': status_type,
+            'status_msg': status_msg,
+        }
+    
+    def __repr__(self):
+        return f'<WebDAVConfig {self.name}>'
+
+
 class Background(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(128))  # 背景名称
