@@ -167,7 +167,7 @@ version: "3"
 
 services:
   nav:
-    image: yilan666/booknav-nav:5.0
+    image: yilan666/booknav-nav:latest
     container_name: nav
     restart: always
     ports:
