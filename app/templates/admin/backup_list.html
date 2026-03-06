@@ -405,6 +405,15 @@
   document.addEventListener("DOMContentLoaded", function () {
   const csrfMeta = document.querySelector('meta[name="csrf-token"]');
   const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
+
+  // ========== Tab 记忆：通过 URL hash 恢复上次激活的标签页 ==========
+  var activeTab = location.hash ? document.querySelector('#backupTabs .nav-link[data-bs-target="' + location.hash + '"]') : null;
+  if (activeTab) { new bootstrap.Tab(activeTab).show(); }
+  document.querySelectorAll('#backupTabs .nav-link').forEach(function (tab) {
+    tab.addEventListener('shown.bs.tab', function (e) {
+      history.replaceState(null, null, e.target.getAttribute('data-bs-target'));
+    });
+  });
   let currentRemoteConfigId = null;
 
   // ========== 确认对话框 ==========

@@ -1060,6 +1060,29 @@
 </div>
 {% endblock %} {% block admin_scripts %}
 <script>
+  // ========== Tab 记忆：通过 URL hash 恢复上次激活的标签页 ==========
+  (function () {
+    var savedTab = sessionStorage.getItem('settingsActiveTab') || location.hash;
+    if (savedTab) {
+      var target = document.querySelector('#settingsTabs .nav-link[data-bs-target="' + savedTab + '"]');
+      if (target) { new bootstrap.Tab(target).show(); }
+      sessionStorage.removeItem('settingsActiveTab');
+    }
+    document.querySelectorAll('#settingsTabs .nav-link').forEach(function (tab) {
+      tab.addEventListener('shown.bs.tab', function (e) {
+        history.replaceState(null, null, e.target.getAttribute('data-bs-target'));
+      });
+    });
+    // 表单提交前保存当前 Tab 到 sessionStorage（因为 POST 重定向会丢失 hash）
+    var form = document.querySelector('form');
+    if (form) {
+      form.addEventListener('submit', function () {
+        var activeTab = document.querySelector('#settingsTabs .nav-link.active');
+        if (activeTab) { sessionStorage.setItem('settingsActiveTab', activeTab.getAttribute('data-bs-target')); }
+      });
+    }
+  })();
+
   // 实时预览Logo和网站标题
   document.addEventListener("DOMContentLoaded", function () {
     const siteNameInput = document.getElementById("site_name");
