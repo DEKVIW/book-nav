@@ -508,9 +508,11 @@ body.bg-none {
     font-size: 0.9rem;
   }
   .search-summary-main {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
+    /* 保持横向布局，允许自然换行，避免不必要的垂直排列 */
+    flex-direction: row;
+    align-items: center;
+    gap: 0.3rem;
+    line-height: 1.4;
   }
   .search-summary-ai,
   .search-summary-status {

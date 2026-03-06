@@ -401,6 +401,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // 将卡片添加到结果容器
         cardContainer.appendChild(siteCard);
+
+        // 添加点击事件监听器，点击时立即隐藏 tooltip
+        siteCard.addEventListener("click", function () {
+          const tooltipInstance = bootstrap?.Tooltip?.getInstance(this);
+          if (tooltipInstance) {
+            tooltipInstance.hide();
+          }
+          // 同时清理可能残留的 tooltip DOM 元素
+          const orphanTooltips = document.body.querySelectorAll(".tooltip.show");
+          orphanTooltips.forEach(function (tooltip) {
+            tooltip.remove();
+          });
+        });
       });
 
       // 初始化工具提示（只初始化新添加的元素，避免重复初始化）
@@ -411,7 +424,11 @@ document.addEventListener("DOMContentLoaded", function () {
         tooltipTriggerList.forEach(function (tooltipTriggerEl) {
           // 检查是否已经初始化过 tooltip
           if (!bootstrap.Tooltip.getInstance(tooltipTriggerEl)) {
-            new bootstrap.Tooltip(tooltipTriggerEl);
+            new bootstrap.Tooltip(tooltipTriggerEl, {
+              trigger: "hover", // 悬停时显示
+              placement: "bottom", // 在下方显示
+              fallbackPlacements: ["top"] // 如果下方空间不够，显示在上方
+            });
           }
         });
       }
@@ -541,11 +558,28 @@ document.addEventListener("DOMContentLoaded", function () {
           siteCard.style.transform = "translateY(0)";
         }, 10);
 
+        // 添加点击事件监听器，点击时立即隐藏 tooltip
+        siteCard.addEventListener("click", function () {
+          const tooltipInstance = bootstrap?.Tooltip?.getInstance(this);
+          if (tooltipInstance) {
+            tooltipInstance.hide();
+          }
+          // 同时清理可能残留的 tooltip DOM 元素
+          const orphanTooltips = document.body.querySelectorAll(".tooltip.show");
+          orphanTooltips.forEach(function (tooltip) {
+            tooltip.remove();
+          });
+        });
+
         // 初始化工具提示（确保不会重复初始化）
         if (typeof bootstrap !== "undefined") {
           // 检查是否已经初始化过 tooltip
           if (!bootstrap.Tooltip.getInstance(siteCard)) {
-            new bootstrap.Tooltip(siteCard);
+            new bootstrap.Tooltip(siteCard, {
+              trigger: "hover", // 悬停时显示
+              placement: "bottom", // 在下方显示
+              fallbackPlacements: ["top"] // 如果下方空间不够，显示在上方
+            });
           }
         }
       }, index * 80); // 每个卡片延迟 80ms，形成流畅的渐进式效果
@@ -594,4 +628,56 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // 监听清除搜索事件
   window.addEventListener("clearSearch", clearSearch);
+
+  // 监听页面焦点变化，当用户从新标签页返回时隐藏所有显示的 tooltip
+  window.addEventListener("focus", function () {
+    // 只隐藏当前显示的 tooltip，不影响正常的悬停功能
+    if (typeof bootstrap !== "undefined") {
+      const tooltipElements = resultsContent.querySelectorAll(
+        '[data-bs-toggle="tooltip"]'
+      );
+      tooltipElements.forEach(function (element) {
+        const tooltipInstance = bootstrap.Tooltip.getInstance(element);
+        if (tooltipInstance) {
+          // 检查 tooltip 是否正在显示
+          const tooltipElement = tooltipInstance.tip;
+          if (tooltipElement && tooltipElement.classList.contains("show")) {
+            tooltipInstance.hide();
+          }
+        }
+      });
+    }
+    // 清理可能残留的 tooltip DOM 元素
+    const orphanTooltips = document.body.querySelectorAll(".tooltip.show");
+    orphanTooltips.forEach(function (tooltip) {
+      tooltip.remove();
+    });
+  });
+
+  // 监听页面可见性变化（用户从其他页面返回时）
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      // 只隐藏当前显示的 tooltip，不影响正常的悬停功能
+      if (typeof bootstrap !== "undefined") {
+        const tooltipElements = resultsContent.querySelectorAll(
+          '[data-bs-toggle="tooltip"]'
+        );
+        tooltipElements.forEach(function (element) {
+          const tooltipInstance = bootstrap.Tooltip.getInstance(element);
+          if (tooltipInstance) {
+            // 检查 tooltip 是否正在显示
+            const tooltipElement = tooltipInstance.tip;
+            if (tooltipElement && tooltipElement.classList.contains("show")) {
+              tooltipInstance.hide();
+            }
+          }
+        });
+      }
+      // 清理可能残留的 tooltip DOM 元素
+      const orphanTooltips = document.body.querySelectorAll(".tooltip.show");
+      orphanTooltips.forEach(function (tooltip) {
+        tooltip.remove();
+      });
+    }
+  });
 });

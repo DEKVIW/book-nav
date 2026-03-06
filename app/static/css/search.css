@@ -93,6 +93,7 @@
 .search-keyword {
   color: var(--primary-color);
   font-weight: 600;
+  white-space: nowrap; /* 防止搜索关键词被换行 */
 }
 
 /* 搜索结果样式 */
