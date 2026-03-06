@@ -81,38 +81,38 @@
           <span class="text-muted small">共 {{ backups|length }} 个本地备份</span>
           <a href="{{ url_for('admin.backup_data') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-database-add me-1"></i> 立即备份
-          </a>
-        </div>
+  </a>
+</div>
 
-        {% if backups %}
-        <div class="table-responsive">
+    {% if backups %}
+    <div class="table-responsive">
           <table class="table table-hover table-striped mb-0">
-            <thead>
-              <tr>
+        <thead>
+          <tr>
                 <th style="width:40px">#</th>
                 <th>文件名</th>
-                <th>备份时间</th>
+            <th>备份时间</th>
                 <th>大小</th>
                 <th style="min-width:230px">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for backup in backups %}
-              <tr>
+          </tr>
+        </thead>
+        <tbody>
+          {% for backup in backups %}
+          <tr>
                 <td>{{ loop.index }}</td>
                 <td><code class="small">{{ backup.filename }}</code></td>
-                <td>{{ backup.time_display }}</td>
-                <td>{{ backup.size_display }}</td>
+            <td>{{ backup.time_display }}</td>
+            <td>{{ backup.size_display }}</td>
                 <td class="action-btns">
                   <form method="post"
-                        action="{{ url_for('admin.restore_backup', filename=backup.filename) }}"
-                        class="d-inline confirm-form"
+                action="{{ url_for('admin.restore_backup', filename=backup.filename) }}"
+                class="d-inline confirm-form"
                         data-message="确定要回滚到此备份？此操作会覆盖当前数据！">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-sm btn-outline-info" title="回滚">
                       <i class="bi bi-arrow-counterclockwise"></i>
-                    </button>
-                  </form>
+                </button>
+              </form>
                   <a href="{{ url_for('admin.download_backup', filename=backup.filename) }}"
                      class="btn btn-sm btn-outline-success" title="下载">
                     <i class="bi bi-download"></i>
@@ -122,25 +122,25 @@
                     <i class="bi bi-cloud-upload"></i>
                   </button>
                   <form method="post"
-                        action="{{ url_for('admin.delete_backup', filename=backup.filename) }}"
-                        class="d-inline confirm-form"
+                action="{{ url_for('admin.delete_backup', filename=backup.filename) }}"
+                class="d-inline confirm-form"
                         data-message="确定要删除此备份？">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-sm btn-outline-danger" title="删除">
                       <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
         <div class="alert alert-info mb-0">
           <i class="bi bi-info-circle me-1"></i> 暂无备份文件，点击"立即备份"创建新备份。
-        </div>
-        {% endif %}
+    </div>
+    {% endif %}
       </div>
     </div>
     <div class="card mt-3">
@@ -152,13 +152,13 @@
           <li><strong><i class="bi bi-cloud-upload"></i></strong> - 将备份上传到已配置的云端存储</li>
         </ul>
       </div>
-    </div>
   </div>
+</div>
 
   <!-- ==================== 云端备份标签 ==================== -->
   <div class="tab-pane fade" id="cloud" role="tabpanel">
     <div class="card border-top-0" style="border-top-left-radius:0;border-top-right-radius:0;">
-      <div class="card-body">
+  <div class="card-body">
 
         <!-- 顶部操作栏 -->
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -253,7 +253,7 @@
             <li><strong>群晖 NAS</strong>：地址 <code>https://IP:5006</code> 或 <code>http://IP:5005</code></li>
             <li><strong>InfiniCLOUD</strong>：地址 <code>https://dav.teracloud.jp/dav/</code></li>
             <li><strong>Alist</strong>：地址 <code>http://IP:端口/dav/</code>（注意用 /dav/ 而非网页地址）</li>
-          </ul>
+    </ul>
         </div>
 
       </div>
@@ -402,15 +402,15 @@
 
 {% block admin_scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener("DOMContentLoaded", function () {
   const csrfMeta = document.querySelector('meta[name="csrf-token"]');
   const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
   let currentRemoteConfigId = null;
 
   // ========== 确认对话框 ==========
   document.querySelectorAll(".confirm-form").forEach(function (form) {
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
       if (confirm(this.getAttribute("data-message") || "确定？")) { this.submit(); }
     });
   });
@@ -822,8 +822,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       uploadModal.show();
+      });
     });
-  });
 
   function doUploadToCloud(configId, filename) {
     showNotification("正在上传 " + filename + "...", "info");
@@ -849,6 +849,6 @@ document.addEventListener("DOMContentLoaded", function () {
     var cloudTab = document.getElementById("cloud-tab");
     if (cloudTab) { new bootstrap.Tab(cloudTab).show(); }
   }
-});
+  });
 </script>
 {% endblock %}

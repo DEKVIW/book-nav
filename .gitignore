@@ -43,6 +43,9 @@ flask_session/
 *.sqlite
 *.sqlite3
 
+# Backups
+app/backups/
+
 # Qdrant data
 data/qdrant/
 qdrant_storage/
