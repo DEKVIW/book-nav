@@ -59,7 +59,7 @@ RUN chmod +x /entrypoint.sh /app/docker/cleanup_backups.sh
 COPY . .
 
 # 设置持久化卷
-VOLUME ["/data", "/app/app/backups", "/app/app/uploads", "/app/app/static", "/etc/nginx/http.d"]
+VOLUME ["/data", "/app/app/backups", "/app/app/uploads", "/etc/nginx/http.d"]
 
 # 暴露端口
 EXPOSE 80
