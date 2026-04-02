@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """备份管理路由（本地备份 + 多云端 WebDAV 备份）"""
 
+import atexit
 import os
+import re
 import shutil
 import threading
 import zipfile
@@ -23,14 +25,168 @@ from app.models import WebDAVConfig
 _auto_backup_thread = None
 _auto_backup_stop = threading.Event()
 _backup_lock = threading.Lock()
+_auto_backup_owner_handle = None
+
+_TIMESTAMP_PATTERN = re.compile(r'(\d{14})')
+_HTTP_DATE_FORMATS = (
+    '%a, %d %b %Y %H:%M:%S %Z',
+    '%A, %d-%b-%y %H:%M:%S %Z',
+    '%a %b %d %H:%M:%S %Y',
+    '%Y-%m-%dT%H:%M:%S%z',
+    '%Y-%m-%dT%H:%M:%SZ',
+)
+
+
+def _get_lock_dir(app):
+    """返回跨进程锁文件目录，优先放在数据库目录。"""
+    db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if db_uri.startswith('sqlite:///'):
+        db_path = db_uri.replace('sqlite:///', '', 1)
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(app.root_path, db_path)
+        lock_dir = os.path.dirname(db_path) or app.root_path
+    else:
+        lock_dir = os.path.join(app.root_path, 'backups')
+
+    os.makedirs(lock_dir, exist_ok=True)
+    return lock_dir
+
+
+def _try_acquire_file_lock(lock_path):
+    """
+    尝试获取跨进程文件锁。
+
+    返回打开的文件句柄；获取失败返回 None。
+    """
+    lock_file = open(lock_path, 'a+b')
+
+    # Windows 的 msvcrt.locking 需要至少锁定 1 个字节
+    lock_file.seek(0, os.SEEK_END)
+    if lock_file.tell() == 0:
+        lock_file.write(b'0')
+        lock_file.flush()
+
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock_file.close()
+        return None
+
+    try:
+        lock_file.seek(0)
+        lock_file.truncate()
+        lock_file.write(str(os.getpid()).encode('utf-8'))
+        lock_file.flush()
+    except OSError:
+        pass
+
+    return lock_file
+
+
+def _release_file_lock(lock_file):
+    """释放跨进程文件锁。"""
+    if not lock_file:
+        return
+
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+    finally:
+        try:
+            lock_file.close()
+        except OSError:
+            pass
+
+
+def _release_auto_backup_owner_lock():
+    """在进程退出时释放自动备份调度锁。"""
+    global _auto_backup_owner_handle
+    _release_file_lock(_auto_backup_owner_handle)
+    _auto_backup_owner_handle = None
+
+
+atexit.register(_release_auto_backup_owner_lock)
+
+
+def _try_acquire_backup_execution_lock(app):
+    """同一时刻只允许一个进程执行备份任务。"""
+    lock_path = os.path.join(_get_lock_dir(app), '.webdav_backup_execution.lock')
+    return _try_acquire_file_lock(lock_path)
+
+
+def _extract_backup_timestamp(filename):
+    """从备份文件名中提取时间戳。"""
+    if not filename:
+        return None
+
+    match = _TIMESTAMP_PATTERN.search(filename)
+    if not match:
+        return None
+
+    try:
+        return datetime.strptime(match.group(1), '%Y%m%d%H%M%S')
+    except ValueError:
+        return None
+
+
+def _parse_http_modified(modified):
+    """解析 WebDAV 返回的 HTTP 修改时间。"""
+    if not modified:
+        return None
+
+    modified = modified.strip()
+    for fmt in _HTTP_DATE_FORMATS:
+        try:
+            return datetime.strptime(modified, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _get_backup_sort_key(file_info):
+    """备份文件排序键，优先使用文件名里的精确时间戳。"""
+    if isinstance(file_info, dict):
+        timestamp = _extract_backup_timestamp(file_info.get('name'))
+        if timestamp:
+            return timestamp
+
+        modified = _parse_http_modified(file_info.get('modified'))
+        if modified:
+            return modified
+    else:
+        timestamp = _extract_backup_timestamp(str(file_info))
+        if timestamp:
+            return timestamp
+
+    return datetime.min
 
 
 def start_auto_backup(app):
     """启动自动备份后台线程"""
-    global _auto_backup_thread
+    global _auto_backup_thread, _auto_backup_owner_handle
     
     if _auto_backup_thread and _auto_backup_thread.is_alive():
         return
+
+    if _auto_backup_owner_handle is None:
+        lock_path = os.path.join(_get_lock_dir(app), '.webdav_auto_backup_scheduler.lock')
+        _auto_backup_owner_handle = _try_acquire_file_lock(lock_path)
+        if _auto_backup_owner_handle is None:
+            app.logger.info("WebDAV 自动备份线程跳过启动：当前进程未获得调度锁")
+            return
     
     _auto_backup_stop.clear()
     _auto_backup_thread = threading.Thread(
@@ -97,6 +253,12 @@ def _do_auto_backup(app, config):
     """对指定云端配置执行自动备份"""
     if not _backup_lock.acquire(blocking=False):
         app.logger.info(f"自动备份 [{config.name}] 跳过：有其他备份任务正在执行")
+        return
+
+    process_lock = _try_acquire_backup_execution_lock(app)
+    if process_lock is None:
+        _backup_lock.release()
+        app.logger.info(f"自动备份 [{config.name}] 跳过：其他进程正在执行备份任务")
         return
     
     try:
@@ -169,6 +331,7 @@ def _do_auto_backup(app, config):
             except Exception:
                 pass
     finally:
+        _release_file_lock(process_lock)
         _backup_lock.release()
 
 
@@ -183,7 +346,7 @@ def _cleanup_remote_backups(client, config):
             return
         
         backup_files = [f for f in result if f['name'].endswith('.zip') or f['name'].endswith('.db3')]
-        backup_files.sort(key=lambda x: x['name'], reverse=True)
+        backup_files.sort(key=_get_backup_sort_key, reverse=True)
         
         if len(backup_files) > keep_count:
             for old_file in backup_files[keep_count:]:
@@ -567,6 +730,11 @@ def webdav_backup_now(config_id):
     """立即创建备份并上传到指定云端"""
     if not _backup_lock.acquire(blocking=False):
         return jsonify({'success': False, 'message': '有其他备份任务正在执行，请稍后再试'})
+
+    process_lock = _try_acquire_backup_execution_lock(current_app)
+    if process_lock is None:
+        _backup_lock.release()
+        return jsonify({'success': False, 'message': '其他进程正在执行备份任务，请稍后再试'})
     
     try:
         config = WebDAVConfig.query.get(config_id)
@@ -626,6 +794,7 @@ def webdav_backup_now(config_id):
     except Exception as e:
         return jsonify({'success': False, 'message': f'备份错误: {str(e)}'}), 500
     finally:
+        _release_file_lock(process_lock)
         _backup_lock.release()
 
 
@@ -639,6 +808,11 @@ def webdav_upload_to(config_id, filename):
     
     if not _backup_lock.acquire(blocking=False):
         return jsonify({'success': False, 'message': '有其他备份任务正在执行，请稍后再试'})
+
+    process_lock = _try_acquire_backup_execution_lock(current_app)
+    if process_lock is None:
+        _backup_lock.release()
+        return jsonify({'success': False, 'message': '其他进程正在执行备份任务，请稍后再试'})
     
     try:
         config = WebDAVConfig.query.get(config_id)
@@ -662,6 +836,8 @@ def webdav_upload_to(config_id, filename):
             
             remote_path = (config.webdav_path or '/nav_backups/').rstrip('/') + '/' + zip_filename
             success, message = client.upload_file(remote_path, zip_path)
+            if success:
+                _cleanup_remote_backups(client, config)
         finally:
             if os.path.exists(zip_path):
                 os.remove(zip_path)
@@ -671,6 +847,7 @@ def webdav_upload_to(config_id, filename):
     except Exception as e:
         return jsonify({'success': False, 'message': f'上传错误: {str(e)}'}), 500
     finally:
+        _release_file_lock(process_lock)
         _backup_lock.release()
 
 
@@ -694,6 +871,7 @@ def webdav_list(config_id):
         
         if success:
             files = [f for f in result if f['name'].endswith('.zip') or f['name'].endswith('.db3')]
+            files.sort(key=_get_backup_sort_key, reverse=True)
             return jsonify({'success': True, 'files': files})
         else:
             return jsonify({'success': False, 'message': result, 'files': []})
