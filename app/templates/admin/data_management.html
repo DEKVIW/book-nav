@@ -1,9 +1,14 @@
 {% extends "admin/base.html" %} {% block admin_content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2><i class="bi bi-server"></i> 数据管理</h2>
-  <a href="{{ url_for('admin.backup_list') }}" class="btn btn-primary">
-    <i class="bi bi-database-fill"></i> 备份管理
-  </a>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.icon_management') }}" class="btn btn-outline-primary">
+      <i class="bi bi-image"></i> 图标管理
+    </a>
+    <a href="{{ url_for('admin.backup_list') }}" class="btn btn-primary">
+      <i class="bi bi-database-fill"></i> 备份管理
+    </a>
+  </div>
 </div>
 
 <!-- CSRF令牌，用于AJAX请求 -->
@@ -156,16 +161,19 @@
         <div class="card bg-light">
           <div class="card-body">
             <h5 class="card-title">
-              <i class="bi bi-image"></i> 一键抓取缺失图标
+              <i class="bi bi-image"></i> 图标任务快捷入口
             </h5>
             <p class="card-text">
-              为所有缺失图标的网站自动获取图标。此过程可能需要较长时间，请耐心等待。
+              为缺失图标的网站启动兼容任务。完整配置、任务历史和问题站点处理请前往图标管理页面。
             </p>
 
             <div id="iconFetchControls">
               <button id="startIconFetch" class="btn btn-primary">
                 <i class="bi bi-play-fill"></i> 开始抓取
               </button>
+              <a href="{{ url_for('admin.icon_management') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-sliders"></i> 进入图标管理
+              </a>
               <button
                 id="stopIconFetch"
                 class="btn btn-danger"

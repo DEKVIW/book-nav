@@ -230,7 +230,7 @@ def api_search():
                         'title': site.title,
                         'description': site.description,
                         'url': site.url,
-                        'icon': site.icon,
+                        'icon': site.display_icon_url,
                         'category': category_data,
                         'views': site.views,
                         'is_private': site.is_private
@@ -280,7 +280,7 @@ def api_search():
             'title': site.title,
             'description': site.description,
             'url': site.url,
-            'icon': site.icon,
+            'icon': site.display_icon_url,
             'category': category_data,
             'views': site.views,
             'is_private': site.is_private
@@ -363,7 +363,7 @@ def _progressive_search(query: str, user_id: Optional[int]):
                     'title': site.title,
                     'description': site.description,
                     'url': site.url,
-                    'icon': site.icon,
+                    'icon': site.display_icon_url,
                     'category': category_data,
                     'views': site.views,
                     'is_private': site.is_private
@@ -428,7 +428,7 @@ def _progressive_search(query: str, user_id: Optional[int]):
                                 'title': site.title,
                                 'description': site.description,
                                 'url': site.url,
-                                'icon': site.icon,
+                                    'icon': site.display_icon_url,
                                 'category': category_data,
                                 'views': site.views,
                                 'is_private': site.is_private,
@@ -697,7 +697,7 @@ def search_in_category(category_id):
             'title': site.title,
             'url': site.url,
             'description': site.description,
-            'icon': site.icon,
+            'icon': site.display_icon_url,
             'sort_order': site.sort_order,
             'is_private': site.is_private
         })

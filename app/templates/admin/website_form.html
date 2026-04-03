@@ -27,6 +27,23 @@
     height: 24px;
     font-size: 14px;
   }
+
+  .icon-status-card {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1rem;
+    background: #f8fbff;
+  }
+
+  .icon-preview {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    object-fit: contain;
+    background: #fff;
+    border: 1px solid #dbe4f0;
+    padding: 6px;
+  }
 </style>
 {% endblock %} {% block admin_content %}
 <div class="card">
@@ -36,7 +53,7 @@
     </h5>
   </div>
   <div class="card-body">
-    <form method="POST" action="">
+    <form method="POST" action="" enctype="multipart/form-data">
       {{ form.hidden_tag() }} {% if form.title.data %}
       <input type="hidden" id="website_id" value="{{ request.view_args.id }}" />
       {% endif %}
@@ -91,8 +108,55 @@
         {% for error in form.icon.errors %}
         <div class="text-danger small">{{ error }}</div>
         {% endfor %}
-        <div class="form-text">可留空，将使用默认图标</div>
+        <div class="form-text">留空时会保留当前手动上传图标；未上传时则回退到自动抓取/全局策略。</div>
       </div>
+      <div class="mb-3">
+        {{ form.icon_file.label(class="form-label") }}
+        {{ form.icon_file(class="form-control") }}
+        {% for error in form.icon_file.errors %}
+        <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">手动上传的图标优先级最高，适合源站图标缺失或不稳定的场景。</div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          {{ form.display_mode_override.label(class="form-label") }}
+          {{ form.display_mode_override(class="form-select") }}
+        </div>
+        <div class="col-md-4">
+          {{ form.sync_local_mode.label(class="form-label") }}
+          {{ form.sync_local_mode(class="form-select") }}
+        </div>
+        <div class="col-md-4">
+          {{ form.sync_imagebed_mode.label(class="form-label") }}
+          {{ form.sync_imagebed_mode(class="form-select") }}
+        </div>
+      </div>
+      {% if icon_snapshot %}
+      <div class="icon-status-card mb-3">
+        <div class="d-flex align-items-center gap-3">
+          {% if icon_snapshot.url %}
+          <img class="icon-preview" src="{{ icon_snapshot.url }}" alt="{{ form.title.data or 'icon' }}">
+          {% else %}
+          <div class="default-site-icon" style="width:42px;height:42px;font-size:18px;">
+            {{ (form.title.data or 'S')[:1] }}
+          </div>
+          {% endif %}
+          <div>
+            <div class="fw-semibold">当前最终展示图标</div>
+            <div class="small text-muted">
+              来源 {{ icon_snapshot.origin or '未命中' }}，显示模式 {{ icon_snapshot.display_mode }}
+            </div>
+            <div class="small text-muted">
+              fetch {{ icon_snapshot.fetch_status }} / local {{ icon_snapshot.local_status }} / imagebed {{ icon_snapshot.imagebed_status }}
+            </div>
+            {% if icon_snapshot.last_error %}
+            <div class="small text-danger mt-1">{{ icon_snapshot.last_error }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
       <div class="mb-3">
         {{ form.category_id.label(class="form-label") }} {{
         form.category_id(class="form-select") }} {% for error in

@@ -40,6 +40,8 @@ flask_session/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
@@ -66,6 +68,7 @@ app/static/uploads/logos/
 *.bak
 *.swp
 *~
+.webdav_auto_backup_scheduler.lock
 
 # Coverage reports
 htmlcov/

@@ -143,10 +143,10 @@
   <div class="site-header animate__animated animate__fadeIn">
     <div class="row align-items-center" style="position: relative; z-index: 1">
       <div class="col-auto">
-        {% if website.icon %}
+        {% if website.display_icon_url %}
         <div class="site-icon">
           <img
-            src="{{ website.icon }}"
+            src="{{ website.display_icon_url }}"
             alt="{{ website.title }}"
             referrerpolicy="no-referrer"
             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
@@ -267,10 +267,10 @@
         <h4 class="mb-3">相关网站</h4>
         {% for site in related_websites %}
         <a href="{{ url_for('main.site', id=site.id) }}" class="related-site">
-          {% if site.icon %}
+          {% if site.display_icon_url %}
           <div class="related-icon">
             <img
-              src="{{ site.icon }}"
+              src="{{ site.display_icon_url }}"
               alt="{{ site.title }}"
               referrerpolicy="no-referrer"
               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"

@@ -7,7 +7,7 @@
           <h5 class="mb-0">添加链接</h5>
         </div>
         <div class="card-body">
-          <form method="POST" action="">
+          <form method="POST" action="" enctype="multipart/form-data">
             {{ form.hidden_tag() }}
             <div class="mb-3">
               {{ form.title.label(class="form-label") }} {{
@@ -38,7 +38,15 @@
               }} {% for error in form.icon.errors %}
               <div class="text-danger small">{{ error }}</div>
               {% endfor %}
-              <div class="form-text">可留空，将使用默认图标</div>
+              <div class="form-text">可留空，系统会按当前策略自动抓取或回退。</div>
+            </div>
+            <div class="mb-3">
+              {{ form.icon_file.label(class="form-label") }} {{
+              form.icon_file(class="form-control") }} {% for error in
+              form.icon_file.errors %}
+              <div class="text-danger small">{{ error }}</div>
+              {% endfor %}
+              <div class="form-text">手动上传的图标优先级最高，适合源站图标不稳定时使用。</div>
             </div>
             <div class="mb-3">
               {{ form.category_id.label(class="form-label") }} {{

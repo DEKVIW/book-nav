@@ -1,8 +1,9 @@
-from flask import jsonify, request
+from flask import jsonify, request, current_app
 from flask_login import current_user, login_required
 from app import db, csrf
 from app.api import bp
 from app.models import Website, Category, OperationLog
+from app.utils.icon_service import delete_website_icon_assets, sync_icon_after_save
 import json
 
 @bp.route('/website/<int:id>/delete', methods=['DELETE'])
@@ -40,6 +41,7 @@ def delete_website(id):
         
         # 在删除数据库记录之前，先保存网站ID
         website_id = website.id
+        delete_website_icon_assets(website.id, delete_record=True)
         db.session.delete(website)
         db.session.commit()
         
@@ -140,6 +142,9 @@ def update_website(id):
             db.session.add(operation_log)
         
         db.session.commit()
+
+        if 'icon' in data or 'url' in data:
+            sync_icon_after_save(website, icon_url=data.get('icon') if 'icon' in data else None, auto_fetch=True)
         
         # 检查是否需要更新向量（标题、描述或分类变化时）
         needs_vector_update = (

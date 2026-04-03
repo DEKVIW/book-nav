@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """页面视图路由"""
 
-from flask import render_template, redirect, url_for, flash, request
+from flask import render_template, redirect, url_for, flash, request, current_app
 from flask_login import current_user, login_required
 from app import db
 from app.main import bp
 from app.models import Category, Website, SiteSettings
 from app.main.forms import WebsiteForm
+from app.utils.icon_service import delete_website_icon_assets, sync_icon_after_save
 from datetime import datetime
 
 
@@ -266,6 +267,13 @@ def add():
         
         db.session.add(website)
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            uploaded_file=form.icon_file.data,
+            icon_url=form.icon.data or '',
+            auto_fetch=bool(SiteSettings.get_settings().icon_auto_fetch_on_create),
+        )
         
         category_name = Category.query.get(form.category_id.data).name if form.category_id.data and form.category_id.data != 0 else None
         operation_log = OperationLog(
@@ -308,6 +316,8 @@ def edit(id):
     form = WebsiteForm(obj=website)
     form.category_id.choices = [(c.id, c.name) for c in Category.query.order_by(Category.order.desc()).all()]
     form.category_id.choices.insert(0, (0, '-- 请选择分类 --'))
+    if request.method == 'GET' and website.icon_meta and website.icon_meta.source_mode == 'manual_upload':
+        form.icon.data = ''
     
     if form.validate_on_submit():
         from app.models import OperationLog
@@ -330,6 +340,13 @@ def edit(id):
         website.sort_order = form.sort_order.data
         
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            uploaded_file=form.icon_file.data,
+            icon_url=form.icon.data or '',
+            auto_fetch=True,
+        )
         
         changes = {}
         if old_title != website.title:
@@ -387,7 +404,13 @@ def edit(id):
     if website.category_id is None:
         form.category_id.data = 0
     
-    return render_template('edit.html', title='编辑链接', form=form, website=website)
+    return render_template(
+        'edit.html',
+        title='编辑链接',
+        form=form,
+        website=website,
+        icon_snapshot=website.display_icon_info,
+    )
 
 
 @bp.route('/delete/<int:id>')
@@ -425,6 +448,7 @@ def delete(id):
     
     # 在删除数据库记录之前，先保存网站ID
     website_id = website.id
+    delete_website_icon_assets(website.id, delete_record=True)
     db.session.delete(website)
     db.session.commit()
     

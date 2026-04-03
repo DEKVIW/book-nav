@@ -33,7 +33,8 @@ def site_info(site_id):
             'title': site.title,
             'url': site.url,
             'description': site.description,
-            'icon': site.icon,
+            'icon': site.display_icon_url,
+            'raw_icon': site.icon,
             'category': category_data,
             'views': site.views,
             'is_private': site.is_private

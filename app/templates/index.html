@@ -279,9 +279,9 @@ head %}
             {% endif %}
             <div class="site-header">
               <div class="site-icon">
-                {% if website.icon %}
+                {% if website.display_icon_url %}
                 <img
-                  src="{{ website.icon }}"
+                  src="{{ website.display_icon_url }}"
                   alt="{{ website.title }}"
                   referrerpolicy="no-referrer"
                   onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
