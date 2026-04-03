@@ -1,11 +1,14 @@
 from datetime import datetime
+import json
 import random
 import string
+from flask import current_app, has_app_context
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db, login_manager
 from config import Config
 from sqlalchemy.orm import backref
+from sqlalchemy.exc import OperationalError
 
 # 定义网站和标签的多对多关系表
 website_tag = db.Table('website_tag',
@@ -210,6 +213,7 @@ class WebsiteIcon(db.Model):
     icon_asset_id = db.Column(db.Integer, db.ForeignKey('icon_asset.id'))
     domain_key = db.Column(db.String(255), index=True)
     source_mode = db.Column(db.String(32), default='auto')
+    source_provider_override = db.Column(db.String(64), default='inherit')
     display_mode_override = db.Column(db.String(32), default='inherit')
     sync_local_mode = db.Column(db.String(32), default='inherit')
     sync_imagebed_mode = db.Column(db.String(32), default='inherit')
@@ -304,6 +308,7 @@ class SiteSettings(db.Model):
     icon_auto_fetch_on_create = db.Column(db.Boolean, default=False)
     icon_default_sync_local = db.Column(db.Boolean, default=False)
     icon_default_sync_imagebed = db.Column(db.Boolean, default=False)
+    icon_source_providers_json = db.Column(db.Text, nullable=True)
     icon_imagebed_provider = db.Column(db.String(64), nullable=True)
     icon_imagebed_api_url = db.Column(db.String(512), nullable=True)
     icon_imagebed_token = db.Column(db.String(512), nullable=True)
@@ -393,9 +398,47 @@ class SiteSettings(db.Model):
     
     # 单例模式：确保只有一条记录
     @classmethod
+    def _database_path(cls):
+        db_uri = None
+        if has_app_context():
+            db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI')
+        if not db_uri:
+            db_uri = getattr(Config, 'SQLALCHEMY_DATABASE_URI', None)
+        if not db_uri or not db_uri.startswith('sqlite:///'):
+            return None
+        return db_uri.replace('sqlite:///', '', 1)
+
+    @classmethod
+    def _repair_legacy_schema(cls):
+        db_path = cls._database_path()
+        if not db_path:
+            return False
+
+        from app.utils.db_migration import migrate_site_settings_fields, migrate_webdav_config_table
+        from app.utils.icon_db_migration import migrate_icon_management_tables
+
+        migrate_site_settings_fields(db_path)
+        migrate_webdav_config_table(db_path)
+        migrate_icon_management_tables(db_path)
+        return True
+
+    @classmethod
     def get_settings(cls):
         """获取站点设置（单例模式）"""
-        settings = cls.query.first()
+        try:
+            settings = cls.query.first()
+        except OperationalError as exc:
+            message = str(exc).lower()
+            if 'site_settings' not in message or 'no such column' not in message:
+                raise
+
+            db.session.rollback()
+            db.session.remove()
+            repaired = cls._repair_legacy_schema()
+            if not repaired:
+                raise
+            settings = cls.query.first()
+
         if not settings:
             settings = cls()
             db.session.add(settings)
@@ -422,6 +465,14 @@ class SiteSettings(db.Model):
         api_url = (self.icon_imagebed_api_url or '').strip()
         token = (self.icon_imagebed_token or '').strip()
         return provider, api_url, token
+
+    def get_icon_source_providers(self):
+        from app.main.utils import merge_icon_source_providers
+
+        return merge_icon_source_providers(self.icon_source_providers_json)
+
+    def set_icon_source_providers(self, providers):
+        self.icon_source_providers_json = json.dumps(providers or [], ensure_ascii=False)
     
     def __repr__(self):
         return f'<SiteSettings {self.site_name}>'

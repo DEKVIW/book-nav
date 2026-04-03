@@ -9,13 +9,17 @@ import json
 import mimetypes
 import os
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
-from flask import current_app, has_request_context, url_for
+from flask import current_app, g, has_app_context, has_request_context, url_for
+from sqlalchemy import func
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import joinedload
 
 from app import db
 from app.models import IconAsset, IconSyncTask, SiteSettings, Website, WebsiteIcon
@@ -25,6 +29,7 @@ ICON_TASK_SYNC_MISSING = 'sync_missing'
 ICON_TASK_SYNC_LOCAL = 'sync_local'
 ICON_TASK_SYNC_IMAGEBED = 'sync_imagebed'
 ICON_TASK_RETRY_FAILED = 'retry_failed'
+ICON_TASK_REFRESH_SOURCE = 'refresh_source'
 
 IMAGEBED_PROVIDER_EASYIMAGE = 'easyimage'
 
@@ -47,7 +52,14 @@ REQUEST_HEADERS = {
     )
 }
 
-ICON_TASK_STALE_GRACE_SECONDS = 15
+ICON_TASK_STALE_GRACE_SECONDS = 180
+ICON_PROXY_HOSTS = {
+    'favicon.im',
+    'favicon.vemetric.com',
+    'www.google.com',
+    'icons.duckduckgo.com',
+    'favicon.cccyun.cc',
+}
 _icon_task_threads: dict[int, threading.Thread] = {}
 
 
@@ -75,7 +87,7 @@ def _format_elapsed(seconds: float | int | None) -> str:
 def _task_reference_time(task: IconSyncTask | None) -> datetime | None:
     if not task:
         return None
-    return task.started_at or task.created_at
+    return task.updated_at or task.started_at or task.created_at
 
 
 def _is_registered_task_alive(task_id: int | None) -> bool:
@@ -88,6 +100,22 @@ def _is_registered_task_alive(task_id: int | None) -> bool:
         return True
     _icon_task_threads.pop(task_id, None)
     return False
+
+
+def _is_sqlite_locked_error(exc: Exception) -> bool:
+    return 'database is locked' in str(exc).lower()
+
+
+def _commit_db_session(max_attempts: int = 5, base_delay: float = 0.2) -> None:
+    for attempt in range(max_attempts):
+        try:
+            db.session.commit()
+            return
+        except OperationalError as exc:
+            db.session.rollback()
+            if not _is_sqlite_locked_error(exc) or attempt == max_attempts - 1:
+                raise
+            time.sleep(base_delay * (attempt + 1))
 
 
 def _normalize_input_url(url: str | None, default_scheme: str = 'https') -> str:
@@ -112,6 +140,171 @@ def _extract_domain_key(url: str | None) -> str:
     if host.startswith('www.'):
         host = host[4:]
     return host
+
+
+def _extract_icon_host_variants(url: str | None) -> list[str]:
+    host = _extract_host(url)
+    if not host:
+        return []
+    variants = [host]
+    if host.startswith('www.') and len(host) > 4:
+        variants.append(host[4:])
+    return list(dict.fromkeys(variants))
+
+
+def _provider_url_for_domain(provider: dict[str, Any], domain: str, size: int = 128) -> str | None:
+    template = (provider.get('template') or '').strip()
+    if not template:
+        return None
+    return template.format(domain=quote(domain, safe=''), size=size, default='identicon')
+
+
+def _get_site_settings_cached() -> SiteSettings:
+    if has_app_context():
+        cached = getattr(g, '_icon_site_settings', None)
+        if cached is None:
+            cached = SiteSettings.get_settings()
+            g._icon_site_settings = cached
+        return cached
+    return SiteSettings.get_settings()
+
+
+def _get_source_provider_configs() -> list[dict[str, Any]]:
+    if has_app_context():
+        cached = getattr(g, '_icon_source_provider_configs', None)
+        if cached is not None:
+            return cached
+    try:
+        providers = _get_site_settings_cached().get_icon_source_providers()
+    except Exception:
+        providers = []
+    if has_app_context():
+        g._icon_source_provider_configs = providers
+    return providers
+
+
+def _get_source_provider_map() -> dict[str, dict[str, Any]]:
+    if has_app_context():
+        cached = getattr(g, '_icon_source_provider_map', None)
+        if cached is not None:
+            return cached
+    provider_map = {
+        provider.get('id'): provider
+        for provider in _get_source_provider_configs()
+        if provider.get('id')
+    }
+    if has_app_context():
+        g._icon_source_provider_map = provider_map
+    return provider_map
+
+
+def _get_preferred_source_provider(meta: WebsiteIcon | None) -> str | None:
+    if not meta:
+        return None
+    value = (meta.source_provider_override or '').strip()
+    return value or None
+
+
+def _find_source_provider_by_id(provider_id: str | None) -> dict[str, Any] | None:
+    provider_id = (provider_id or '').strip()
+    if not provider_id:
+        return None
+    return _get_source_provider_map().get(provider_id)
+
+
+def _get_source_provider_label(provider_id: str | None) -> str | None:
+    provider = _find_source_provider_by_id(provider_id)
+    if provider:
+        return provider.get('label') or provider.get('id')
+    return provider_id or None
+
+
+def _match_source_provider(website: Website, source_url: str | None, meta: WebsiteIcon | None = None) -> str | None:
+    source_url = (source_url or '').strip()
+    if not source_url:
+        return None
+
+    provider_configs = _get_source_provider_configs()
+    for provider in provider_configs:
+        if provider.get('kind') == 'origin':
+            continue
+        for domain in _extract_icon_host_variants(website.url):
+            candidate_url = _provider_url_for_domain(provider, domain)
+            if candidate_url and candidate_url == source_url:
+                return provider.get('id')
+
+    source_host = _extract_host(source_url)
+    provider_host_map = {
+        'www.google.com': 'google_s2',
+        'icons.duckduckgo.com': 'duckduckgo',
+        'favicon.cccyun.cc': 'cccyun',
+        'favicon.im': 'favicon_im',
+        'favicon.vemetric.com': 'vemetric',
+    }
+    return provider_host_map.get(source_host, 'origin_direct')
+
+
+def _should_allow_domain_reuse(source_url: str | None, domain_key: str | None) -> bool:
+    if not domain_key:
+        return False
+    source_host = _extract_host(source_url)
+    source_domain = _extract_domain_key(source_url)
+    return source_domain == domain_key or source_host in ICON_PROXY_HOSTS
+
+
+def _build_icon_download_candidates(website: Website, primary_source_url: str | None) -> list[str]:
+    candidates: list[str] = []
+    meta = website.icon_meta
+    preferred_provider = _get_preferred_source_provider(meta)
+    force_specific_provider = preferred_provider not in {None, '', 'inherit', 'auto'}
+    allow_primary_source = True
+
+    if force_specific_provider and meta and meta.source_mode == 'auto':
+        allow_primary_source = (
+            _match_source_provider(website, primary_source_url, meta) == preferred_provider
+        )
+
+    for candidate in [primary_source_url] if allow_primary_source else []:
+        candidate = (candidate or '').strip()
+        if candidate:
+            candidates.append(candidate)
+
+    try:
+        from app.main.utils import build_icon_candidate_urls
+
+        candidates.extend(
+            build_icon_candidate_urls(
+                website.url,
+                providers=_get_source_provider_configs(),
+                preferred_provider=preferred_provider,
+            )
+        )
+    except Exception:
+        pass
+
+    deduped: list[str] = []
+    for candidate in candidates:
+        candidate = (candidate or '').strip()
+        if candidate and candidate not in deduped:
+            deduped.append(candidate)
+    return deduped
+
+
+def _download_icon_response(website: Website, source_url: str) -> tuple[str, requests.Response]:
+    errors: list[str] = []
+    for candidate_url in _build_icon_download_candidates(website, source_url):
+        try:
+            response = requests.get(candidate_url, headers=REQUEST_HEADERS, timeout=15)
+            response.raise_for_status()
+            if not response.content:
+                raise ValueError('empty icon response')
+            return candidate_url, response
+        except Exception as exc:
+            errors.append(f'{candidate_url}: {exc}')
+
+    if errors:
+        raise RuntimeError(' | '.join(errors[:3]))
+    raise RuntimeError('missing icon source url')
 
 
 def _public_static_url(relative_path: str | None) -> str | None:
@@ -220,14 +413,14 @@ def get_imagebed_icon_url(meta: WebsiteIcon | None) -> str | None:
 
 
 def _get_effective_display_mode(meta: WebsiteIcon | None) -> str:
-    settings = SiteSettings.get_settings()
+    settings = _get_site_settings_cached()
     if meta and meta.display_mode_override and meta.display_mode_override != 'inherit':
         return meta.display_mode_override
     return (settings.icon_display_mode or 'smart').strip() or 'smart'
 
 
 def should_sync_local(meta: WebsiteIcon | None) -> bool:
-    settings = SiteSettings.get_settings()
+    settings = _get_site_settings_cached()
     mode = (meta.sync_local_mode if meta else 'inherit') or 'inherit'
     if mode == 'always':
         return True
@@ -237,7 +430,7 @@ def should_sync_local(meta: WebsiteIcon | None) -> bool:
 
 
 def should_sync_imagebed(meta: WebsiteIcon | None) -> bool:
-    settings = SiteSettings.get_settings()
+    settings = _get_site_settings_cached()
     mode = (meta.sync_imagebed_mode if meta else 'inherit') or 'inherit'
     if mode == 'always':
         return True
@@ -398,8 +591,10 @@ def get_website_icon_snapshot(website: Website) -> dict[str, Any]:
 
     effective_display_mode = _get_effective_display_mode(meta)
     source_mode = meta.source_mode if meta else ('manual_url' if (website.icon or '').strip() else 'auto')
+    source_provider_override = (meta.source_provider_override if meta else 'inherit') or 'inherit'
 
     source_url = None if source_mode == 'manual_upload' else _resolve_source_url(meta, website)
+    source_provider = _match_source_provider(website, source_url, meta) if source_url else None
     local_url = get_local_icon_url(meta)
     imagebed_url = get_imagebed_icon_url(meta)
 
@@ -421,13 +616,17 @@ def get_website_icon_snapshot(website: Website) -> dict[str, Any]:
     if source_mode == 'manual_upload' and selected_origin == 'local':
         selected_origin = 'manual_upload'
 
-    asset_ref_count = asset.website_icons.count() if asset else 0
+    asset_ref_count = getattr(asset, '_website_icon_ref_count', None) if asset else 0
+    shared_asset = bool(asset and asset_ref_count and asset_ref_count > 1)
 
     return {
         'url': selected_url,
         'origin': selected_origin,
         'display_mode': effective_display_mode,
         'source_mode': source_mode,
+        'source_provider_override': source_provider_override,
+        'source_provider': source_provider,
+        'source_provider_label': _get_source_provider_label(source_provider),
         'fetch_status': meta.fetch_status if meta else ('success' if source_url else 'pending'),
         'local_status': meta.local_status if meta else 'pending',
         'imagebed_status': meta.imagebed_status if meta else 'pending',
@@ -440,8 +639,8 @@ def get_website_icon_snapshot(website: Website) -> dict[str, Any]:
         'last_error': meta.last_error if meta else None,
         'asset_id': asset.id if asset else None,
         'domain_key': (meta.domain_key if meta else '') or _extract_domain_key(website.url),
-        'shared_asset': bool(asset and asset_ref_count > 1),
-        'asset_ref_count': asset_ref_count,
+        'shared_asset': shared_asset,
+        'asset_ref_count': asset_ref_count if asset_ref_count is not None else (1 if asset else 0),
     }
 
 
@@ -508,7 +707,7 @@ def download_icon_to_local(
     reusable_asset = _find_reusable_asset(
         source_url=source_url,
         domain_key=domain_key,
-        allow_domain_reuse=_extract_domain_key(source_url) == domain_key,
+        allow_domain_reuse=_should_allow_domain_reuse(source_url, domain_key),
     )
 
     meta.fetch_status = 'success'
@@ -521,29 +720,28 @@ def download_icon_to_local(
         meta.last_local_sync_at = _now()
         meta.last_error = None
         if update_legacy_icon and meta.source_mode != 'manual_upload':
-            website.icon = source_url
+            website.icon = reusable_asset.source_url or source_url
         db.session.commit()
         return get_website_icon_snapshot(website)
 
     try:
-        response = requests.get(source_url, headers=REQUEST_HEADERS, timeout=15)
-        response.raise_for_status()
+        effective_source_url, response = _download_icon_response(website, source_url)
         asset = _persist_icon_bytes(
             website,
             response.content,
             response.headers.get('Content-Type'),
-            Path(urlparse(source_url).path).name,
-            source_url,
+            Path(urlparse(effective_source_url).path).name,
+            effective_source_url,
         )
-        asset.source_url = source_url
-        asset.source_host = _extract_host(source_url)
+        asset.source_url = effective_source_url
+        asset.source_host = _extract_host(effective_source_url)
         _bind_asset_to_meta(meta, asset)
 
         meta.local_status = 'success'
         meta.last_local_sync_at = _now()
         meta.last_error = None
         if update_legacy_icon and meta.source_mode != 'manual_upload':
-            website.icon = source_url
+            website.icon = effective_source_url
         db.session.commit()
         return get_website_icon_snapshot(website)
     except Exception as exc:
@@ -576,7 +774,7 @@ def upload_icon_to_imagebed(website: Website) -> dict[str, Any]:
         db.session.commit()
         raise ValueError('missing local icon asset')
 
-    provider, api_url, token = SiteSettings.get_settings().get_icon_imagebed_config()
+    provider, api_url, token = _get_site_settings_cached().get_icon_imagebed_config()
     if provider != IMAGEBED_PROVIDER_EASYIMAGE or not api_url or not token:
         meta.imagebed_status = 'failed'
         meta.last_error = 'imagebed is not configured'
@@ -638,7 +836,7 @@ def mark_icon_manual_url(
     reusable_asset = _find_reusable_asset(
         source_url=icon_url,
         domain_key=meta.domain_key,
-        allow_domain_reuse=_extract_domain_key(icon_url) == (meta.domain_key or ''),
+        allow_domain_reuse=_should_allow_domain_reuse(icon_url, meta.domain_key),
     )
     if reusable_asset:
         _bind_asset_to_meta(meta, reusable_asset)
@@ -691,12 +889,21 @@ def refresh_icon_from_source(
 
     if not source_url:
         from app.main.utils import get_website_icon
-        result = get_website_icon(website.url)
-        source_url = (result.get('icon_url') or result.get('fallback_url') or '').strip()
+        result = get_website_icon(
+            website.url,
+            providers=_get_source_provider_configs(),
+            preferred_provider=_get_preferred_source_provider(meta),
+        )
+        source_url = (result.get('icon_url') or '').strip()
+        if not source_url and result.get('success'):
+            source_url = (result.get('fallback_url') or '').strip()
 
     if not source_url:
         meta.fetch_status = 'failed'
-        meta.last_error = 'unable to resolve icon source'
+        meta.last_error = (
+            (result.get('message') if 'result' in locals() and isinstance(result, dict) else '')
+            or 'unable to resolve icon source'
+        )
         db.session.commit()
         return get_website_icon_snapshot(website)
 
@@ -708,7 +915,7 @@ def refresh_icon_from_source(
     reusable_asset = _find_reusable_asset(
         source_url=source_url,
         domain_key=meta.domain_key,
-        allow_domain_reuse=_extract_domain_key(source_url) == (meta.domain_key or ''),
+        allow_domain_reuse=_should_allow_domain_reuse(source_url, meta.domain_key),
     )
     if reusable_asset:
         _bind_asset_to_meta(meta, reusable_asset)
@@ -748,12 +955,15 @@ def sync_icon_after_save(
     auto_fetch: bool = False,
     sync_local: bool | None = None,
     sync_imagebed: bool | None = None,
+    source_provider_override: str | None = None,
     display_mode_override: str | None = None,
     sync_local_mode: str | None = None,
     sync_imagebed_mode: str | None = None,
 ) -> dict[str, Any]:
     meta = ensure_website_icon(website)
 
+    if source_provider_override is not None:
+        meta.source_provider_override = source_provider_override
     if display_mode_override:
         meta.display_mode_override = display_mode_override
     if sync_local_mode:
@@ -831,7 +1041,7 @@ def create_icon_sync_task(
         created_by_id=created_by_id,
     )
     db.session.add(task)
-    db.session.commit()
+    _commit_db_session()
     return task
 
 
@@ -902,7 +1112,7 @@ def recover_stale_icon_sync_tasks(grace_seconds: int = ICON_TASK_STALE_GRACE_SEC
         _icon_task_threads.pop(task.id, None)
 
     if recovered:
-        db.session.commit()
+        _commit_db_session()
     return recovered
 
 
@@ -934,6 +1144,9 @@ def _load_task_websites(task: IconSyncTask) -> list[int]:
                 snapshot.get('local_status'),
                 snapshot.get('imagebed_status'),
             }:
+                filtered.append(website.id)
+        elif task.task_type == ICON_TASK_REFRESH_SOURCE:
+            if snapshot.get('source_mode') == 'auto':
                 filtered.append(website.id)
         else:
             filtered.append(website.id)
@@ -1019,6 +1232,12 @@ def _run_task_for_website(task: IconSyncTask, website: Website) -> str:
             return 'failed'
         return 'success'
 
+    if task.task_type == ICON_TASK_REFRESH_SOURCE:
+        if snapshot.get('source_mode') != 'auto':
+            return 'skipped'
+        refreshed = refresh_icon_from_source(website, force=True, sync_local=False, sync_imagebed=False)
+        return 'success' if refreshed.get('source_url') else 'failed'
+
     return 'skipped'
 
 
@@ -1027,24 +1246,25 @@ def _execute_icon_sync_task(app: Any, task_id: int) -> None:
         task = IconSyncTask.query.get(task_id)
         if not task:
             _icon_task_threads.pop(task_id, None)
+            db.session.remove()
             return
 
         task.status = 'running'
         task.started_at = _now()
         task.error_summary = None
-        db.session.commit()
+        _commit_db_session()
 
         try:
             website_ids = _load_task_websites(task)
             task.total = len(website_ids)
-            db.session.commit()
+            _commit_db_session()
 
             for website_id in website_ids:
                 website = db.session.get(Website, website_id)
                 if not website:
                     task.processed += 1
                     task.skipped += 1
-                    db.session.commit()
+                    _commit_db_session()
                     continue
 
                 try:
@@ -1053,7 +1273,7 @@ def _execute_icon_sync_task(app: Any, task_id: int) -> None:
                     meta = WebsiteIcon.query.filter_by(website_id=website_id).first()
                     if meta:
                         meta.last_error = str(exc)
-                    db.session.commit()
+                    _commit_db_session()
                     result = 'failed'
                     if not task.error_summary:
                         task.error_summary = f'website_id={website_id}: {exc}'
@@ -1065,15 +1285,19 @@ def _execute_icon_sync_task(app: Any, task_id: int) -> None:
                     task.failed += 1
                 else:
                     task.skipped += 1
-                db.session.commit()
+                _commit_db_session()
 
             task.status = 'completed'
         except Exception as exc:
+            db.session.rollback()
             task.status = 'failed'
             task.error_summary = str(exc)
         finally:
             task.finished_at = _now()
-            db.session.commit()
+            try:
+                _commit_db_session()
+            finally:
+                db.session.remove()
             _icon_task_threads.pop(task_id, None)
 
 
@@ -1101,7 +1325,9 @@ def start_icon_sync_task(
 
 
 def get_icon_dashboard_summary() -> dict[str, Any]:
-    websites = Website.query.all()
+    websites = Website.query.options(
+        joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+    ).all()
     summary = {
         'total_websites': len(websites),
         'source_available': 0,
@@ -1115,7 +1341,6 @@ def get_icon_dashboard_summary() -> dict[str, Any]:
         'display_missing': 0,
     }
 
-    shared_asset_ids: set[int] = set()
     for website in websites:
         snapshot = get_website_icon_snapshot(website)
         if snapshot.get('has_source'):
@@ -1126,8 +1351,6 @@ def get_icon_dashboard_summary() -> dict[str, Any]:
             summary['imagebed_available'] += 1
         if snapshot.get('source_mode') == 'manual_upload':
             summary['manual_upload_count'] += 1
-        if snapshot.get('shared_asset') and snapshot.get('asset_id'):
-            shared_asset_ids.add(snapshot['asset_id'])
         if snapshot.get('fetch_status') == 'failed':
             summary['fetch_failed'] += 1
         if snapshot.get('local_status') == 'failed':
@@ -1137,7 +1360,14 @@ def get_icon_dashboard_summary() -> dict[str, Any]:
         if not snapshot.get('url'):
             summary['display_missing'] += 1
 
-    summary['shared_asset_count'] = len(shared_asset_ids)
+    shared_asset_rows = (
+        db.session.query(WebsiteIcon.icon_asset_id)
+        .filter(WebsiteIcon.icon_asset_id.isnot(None))
+        .group_by(WebsiteIcon.icon_asset_id)
+        .having(func.count(WebsiteIcon.id) > 1)
+        .all()
+    )
+    summary['shared_asset_count'] = len(shared_asset_rows)
     return summary
 
 

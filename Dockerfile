@@ -1,6 +1,16 @@
 # 第一阶段：构建依赖
 FROM python:3.9-alpine AS builder
 
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
+ARG PIP_FALLBACK_INDEX_URL=https://pypi.org/simple
+ARG PIP_TIMEOUT=180
+ARG PIP_RETRIES=8
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=${PIP_TIMEOUT} \
+    PIP_ROOT_USER_ACTION=ignore
+
 # 设置工作目录
 WORKDIR /app
 
@@ -8,14 +18,26 @@ WORKDIR /app
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories \
     && apk add --no-cache gcc musl-dev libffi-dev
 
-# 配置pip使用国内镜像源（使用阿里云镜像，更稳定）
-RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
-    && pip config set global.trusted-host mirrors.aliyun.com
+# 配置pip镜像源与网络超时
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && pip config set global.index-url "${PIP_INDEX_URL}" \
+    && pip config set global.timeout "${PIP_TIMEOUT}" \
+    && pip config set global.retries "${PIP_RETRIES}" \
+    && if [ -n "${PIP_TRUSTED_HOST}" ]; then pip config set global.trusted-host "${PIP_TRUSTED_HOST}"; fi
 
 # 复制依赖文件，安装到轮子目录
 COPY requirements.txt .
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt \
-    && pip wheel --no-cache-dir --wheel-dir /app/wheels gunicorn
+RUN set -eux; \
+    build_wheels() { \
+        pip wheel --prefer-binary --no-cache-dir --wheel-dir /app/wheels -r requirements.txt; \
+        pip wheel --prefer-binary --no-cache-dir --wheel-dir /app/wheels gunicorn; \
+    }; \
+    build_wheels || { \
+        echo "Primary pip mirror failed, retrying with official PyPI..."; \
+        pip config set global.index-url "${PIP_FALLBACK_INDEX_URL}"; \
+        pip config unset global.trusted-host || true; \
+        build_wheels; \
+    }
 
 # 第二阶段：运行环境
 FROM python:3.9-alpine
@@ -30,7 +52,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositorie
     && apk add --no-cache nginx supervisor libffi tzdata \
     && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone \
-    && mkdir -p /run/nginx /app/app/data /app/app/backups /app/app/uploads /app/app/static /data \
+    && mkdir -p /run/nginx /app/app/data /app/app/backups /app/app/static/uploads /app/app/static /data \
     && rm -rf /var/cache/apk/* \
     && rm -rf /tmp/*
 
@@ -59,7 +81,7 @@ RUN chmod +x /entrypoint.sh /app/docker/cleanup_backups.sh
 COPY . .
 
 # 设置持久化卷
-VOLUME ["/data", "/app/app/backups", "/app/app/uploads", "/etc/nginx/http.d"]
+VOLUME ["/data", "/app/app/backups", "/app/app/static/uploads", "/etc/nginx/http.d"]
 
 # 暴露端口
 EXPOSE 80

@@ -23,6 +23,8 @@ htmlcov/
 *.env
 .flaskenv
 instance/
+venv/
+.venv/
 
 # 文档和示例文件
 README.md
@@ -51,6 +53,9 @@ desktop.ini
 # 日志文件
 *.log
 logs/
+
+# 运行期上传资源，不打进镜像
+app/static/uploads/
 
 # Docker相关
 .dockerignore

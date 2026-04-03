@@ -14,9 +14,14 @@ ICON_SETTINGS_FIELDS = [
     ('icon_auto_fetch_on_create', 'BOOLEAN DEFAULT 0'),
     ('icon_default_sync_local', 'BOOLEAN DEFAULT 0'),
     ('icon_default_sync_imagebed', 'BOOLEAN DEFAULT 0'),
+    ('icon_source_providers_json', 'TEXT'),
     ('icon_imagebed_provider', 'VARCHAR(64)'),
     ('icon_imagebed_api_url', 'VARCHAR(512)'),
     ('icon_imagebed_token', 'VARCHAR(512)'),
+]
+
+WEBSITE_ICON_FIELDS = [
+    ('source_provider_override', "VARCHAR(64) DEFAULT 'inherit'"),
 ]
 
 
@@ -90,6 +95,7 @@ def migrate_icon_management_tables(db_path: str) -> int:
                 icon_asset_id INTEGER,
                 domain_key VARCHAR(255),
                 source_mode VARCHAR(32) DEFAULT 'auto',
+                source_provider_override VARCHAR(64) DEFAULT 'inherit',
                 display_mode_override VARCHAR(32) DEFAULT 'inherit',
                 sync_local_mode VARCHAR(32) DEFAULT 'inherit',
                 sync_imagebed_mode VARCHAR(32) DEFAULT 'inherit',
@@ -136,6 +142,9 @@ def migrate_icon_management_tables(db_path: str) -> int:
 
         if _table_exists(cursor, 'site_settings'):
             change_count += _ensure_columns(cursor, 'site_settings', ICON_SETTINGS_FIELDS)
+
+        if _table_exists(cursor, 'website_icon'):
+            change_count += _ensure_columns(cursor, 'website_icon', WEBSITE_ICON_FIELDS)
 
         if _table_exists(cursor, 'website'):
             cursor.execute("SELECT website_id FROM website_icon")

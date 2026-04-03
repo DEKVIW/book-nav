@@ -4,9 +4,10 @@
 
 from flask import render_template, redirect, url_for, flash, request, current_app
 from flask_login import current_user, login_required
+from sqlalchemy.orm import joinedload
 from app import db
 from app.main import bp
-from app.models import Category, Website, SiteSettings
+from app.models import Category, Website, SiteSettings, WebsiteIcon
 from app.main.forms import WebsiteForm
 from app.utils.icon_service import delete_website_icon_assets, sync_icon_after_save
 from datetime import datetime
@@ -15,10 +16,12 @@ from datetime import datetime
 @bp.route('/')
 def index():
     """首页"""
+    icon_load = joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+
     # 只获取一级分类（parent_id为None的分类）
     categories = Category.query.filter_by(parent_id=None).order_by(Category.order.desc()).all()
     
-    featured_sites_query = Website.query.filter_by(is_featured=True)
+    featured_sites_query = Website.query.options(icon_load).filter_by(is_featured=True)
     if not current_user.is_authenticated:
         featured_sites_query = featured_sites_query.filter_by(is_private=False)
     elif not current_user.is_admin:
@@ -30,7 +33,7 @@ def index():
     featured_sites = featured_sites_query.order_by(Website.views.desc()).limit(6).all()
     
     for category in categories:
-        websites_query = Website.query.filter_by(category_id=category.id)
+        websites_query = Website.query.options(icon_load).filter_by(category_id=category.id)
         if not current_user.is_authenticated:
             websites_query = websites_query.filter_by(is_private=False)
         elif not current_user.is_admin:
@@ -75,7 +78,7 @@ def index():
                 # 获取第一个二级分类（权重靠前的，order值最大的）
                 first_child = children[0]
                 # 查询第一个二级分类的网站
-                first_child_query = Website.query.filter_by(category_id=first_child.id)
+                first_child_query = Website.query.options(icon_load).filter_by(category_id=first_child.id)
                 if not current_user.is_authenticated:
                     first_child_query = first_child_query.filter_by(is_private=False)
                 elif not current_user.is_admin:
@@ -130,7 +133,8 @@ def category(id):
     
     highlight_id = request.args.get('highlight')
     
-    websites_query = Website.query.filter_by(category_id=id)
+    icon_load = joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+    websites_query = Website.query.options(icon_load).filter_by(category_id=id)
     
     if not current_user.is_authenticated:
         websites_query = websites_query.filter_by(is_private=False)
@@ -219,7 +223,8 @@ def search():
     if not query:
         return redirect(url_for('main.index'))
     
-    websites_query = Website.query.filter(
+    icon_load = joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+    websites_query = Website.query.options(icon_load).filter(
         Website.title.contains(query) |
         Website.description.contains(query) |
         Website.url.contains(query)
@@ -479,7 +484,7 @@ def goto(website_id):
         db.session.commit()
         return redirect(website.url)
     
-    settings = SiteSettings.query.first()
+    settings = SiteSettings.get_settings()
     
     if current_user.is_authenticated and current_user.is_admin:
         countdown = settings.admin_transition_time
