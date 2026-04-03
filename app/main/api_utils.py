@@ -5,12 +5,17 @@
 from flask import request, jsonify, Response, stream_with_context, current_app
 from flask_login import current_user, login_required
 from app.main import bp
-from app.models import Website, Category
+from app.models import Website, Category, SiteSettings
 from app.main.utils import parse_website_info, get_website_icon
 from urllib.parse import urlparse
 import json
 import requests
 from bs4 import BeautifulSoup
+
+
+def _get_configured_icon_result(url):
+    settings = SiteSettings.get_settings()
+    return get_website_icon(url, providers=settings.get_icon_source_providers())
 
 
 @bp.route('/site/<int:site_id>/info')
@@ -33,7 +38,8 @@ def site_info(site_id):
             'title': site.title,
             'url': site.url,
             'description': site.description,
-            'icon': site.icon,
+            'icon': site.display_icon_url,
+            'raw_icon': site.icon,
             'category': category_data,
             'views': site.views,
             'is_private': site.is_private
@@ -58,7 +64,6 @@ def fetch_website_info():
     # 如果获取失败或信息不完整，且启用了AI回退，尝试使用AI生成
     if use_ai_fallback and (not result.get("success") or not result.get("title") or not result.get("description")):
         try:
-            from app.models import SiteSettings
             from app.utils.ai_search import create_ai_service_from_settings
             
             settings = SiteSettings.get_settings()
@@ -97,7 +102,7 @@ def fetch_website_info():
             if not result.get("success"):
                 result["message"] = f"AI生成过程出错: {str(e)}"
     
-    icon_result = get_website_icon(url)
+    icon_result = _get_configured_icon_result(url)
     if icon_result["success"]:
         result["icon_url"] = icon_result["icon_url"]
     elif "fallback_url" in icon_result:
@@ -121,7 +126,7 @@ def api_get_website_icon():
     if not url:
         return jsonify({"success": False, "message": "未提供URL参数"})
     
-    result = get_website_icon(url)
+    result = _get_configured_icon_result(url)
     return jsonify(result)
 
 
@@ -247,7 +252,7 @@ def fetch_website_info_with_progress():
             
             yield json.dumps({"stage": "fetching_icon", "progress": 80, "message": "正在获取高质量图标..."}) + "\n"
             try:
-                icon_result = get_website_icon(processed_url)
+                icon_result = _get_configured_icon_result(processed_url)
                 if icon_result["success"]:
                     icon_url = icon_result["icon_url"]
                 elif "fallback_url" in icon_result:

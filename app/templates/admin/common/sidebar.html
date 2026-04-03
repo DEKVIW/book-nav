@@ -74,6 +74,15 @@
       </li>
 
       <li
+        class="sidebar-item {% if 'admin.icon_management' in request.endpoint %}active{% endif %}"
+      >
+        <a href="{{ url_for('admin.icon_management') }}" class="sidebar-link">
+          <i class="bi bi-image"></i>
+          <span>图标管理</span>
+        </a>
+      </li>
+
+      <li
         class="sidebar-item {% if 'admin.backup_list' in request.endpoint %}active{% endif %}"
       >
         <a href="{{ url_for('admin.backup_list') }}" class="sidebar-link">

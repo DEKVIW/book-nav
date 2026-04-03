@@ -530,7 +530,7 @@
           <div class="site-header-section">
             <div class="site-icon">
               <img
-                src="{{ website.icon or url_for('static', filename='images/default-icon.png') }}"
+                src="{{ website.display_icon_url or url_for('static', filename='images/default-icon.png') }}"
                 alt="{{ website.title }}"
                 class="img-fluid"
                 referrerpolicy="no-referrer"

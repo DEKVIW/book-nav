@@ -7,7 +7,7 @@
           <h5 class="mb-0">编辑链接</h5>
         </div>
         <div class="card-body">
-          <form method="POST" action="">
+          <form method="POST" action="" enctype="multipart/form-data">
             {{ form.hidden_tag() }}
             <div class="mb-3">
               {{ form.title.label(class="form-label") }} {{
@@ -38,8 +38,45 @@
               }} {% for error in form.icon.errors %}
               <div class="text-danger small">{{ error }}</div>
               {% endfor %}
-              <div class="form-text">可留空，将使用默认图标</div>
+              <div class="form-text">留空时会保留当前上传图标，或按当前策略自动抓取。</div>
             </div>
+            <div class="mb-3">
+              {{ form.icon_file.label(class="form-label") }} {{
+              form.icon_file(class="form-control") }} {% for error in
+              form.icon_file.errors %}
+              <div class="text-danger small">{{ error }}</div>
+              {% endfor %}
+              <div class="form-text">重新上传后会覆盖当前手动上传图标。</div>
+            </div>
+            {% if icon_snapshot %}
+            <div class="alert alert-light border mb-3">
+              <div class="d-flex align-items-center gap-3">
+                {% if icon_snapshot.url %}
+                <img
+                  src="{{ icon_snapshot.url }}"
+                  alt="{{ form.title.data or website.title }}"
+                  style="width:42px;height:42px;border-radius:12px;object-fit:contain;background:#fff;border:1px solid #dbe4f0;padding:6px;"
+                />
+                {% else %}
+                <div
+                  class="d-inline-flex align-items-center justify-content-center rounded"
+                  style="width:42px;height:42px;background:#e9ecef;font-weight:600;"
+                >
+                  {{ (form.title.data or website.title or 'S')[:1] }}
+                </div>
+                {% endif %}
+                <div>
+                  <div class="fw-semibold">当前展示图标</div>
+                  <div class="small text-muted">
+                    来源 {{ icon_snapshot.origin or '未命中' }}，模式 {{ icon_snapshot.display_mode }}
+                  </div>
+                  {% if icon_snapshot.last_error %}
+                  <div class="small text-danger mt-1">{{ icon_snapshot.last_error }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% endif %}
             <div class="mb-3">
               {{ form.category_id.label(class="form-label") }} {{
               form.category_id(class="form-select") }} {% for error in

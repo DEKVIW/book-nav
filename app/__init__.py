@@ -7,6 +7,8 @@ import datetime
 import json
 from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 # 设置SQLite允许多线程访问
 sqlite3.threadsafety = 3  # 设置为最高等级的线程安全
@@ -24,7 +26,8 @@ def create_app(config_class=Config):
     # 配置SQLAlchemy以支持多线程
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'connect_args': {
-            'check_same_thread': False  # 允许SQLite在多线程中使用
+            'check_same_thread': False,  # 允许SQLite在多线程中使用
+            'timeout': 30,               # 遇到写锁时等待一段时间，减少 database is locked
         }
     }
     
@@ -93,11 +96,13 @@ def create_app(config_class=Config):
         # 数据库字段迁移（确保新字段自动添加）
         try:
             from app.utils.db_migration import migrate_site_settings_fields, migrate_webdav_config_table
+            from app.utils.icon_db_migration import migrate_icon_management_tables
             import os
             db_path = app.config.get('SQLALCHEMY_DATABASE_URI', '').replace('sqlite:///', '')
             if db_path and os.path.exists(db_path):
                 migrate_site_settings_fields(db_path)
                 migrated = migrate_webdav_config_table(db_path)
+                migrate_icon_management_tables(db_path)
                 if migrated > 0:
                     print(f"已将旧 WebDAV 配置迁移到 webdav_config 表（{migrated} 条）")
         except Exception as e:
@@ -148,5 +153,16 @@ def create_app(config_class=Config):
         return '是' if value else '否'
     
     return app
+
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+        cursor.execute("PRAGMA foreign_keys=ON;")
+        cursor.execute("PRAGMA busy_timeout=30000;")
+        cursor.close()
 
 from app import models 

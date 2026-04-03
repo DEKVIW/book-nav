@@ -2,7 +2,7 @@ from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, BooleanField, SubmitField, SelectField, HiddenField, IntegerField, PasswordField, DateTimeField
 from wtforms.validators import DataRequired, Length, URL, Optional, ValidationError, Email, EqualTo, NumberRange
-from app.models import Category, User
+from app.models import Category, SiteSettings, User
 import re
 
 class CategoryForm(FlaskForm):
@@ -31,6 +31,27 @@ class WebsiteForm(FlaskForm):
     url = StringField('网站URL', validators=[DataRequired(), URL(), Length(max=256)])
     description = TextAreaField('网站描述', validators=[Optional(), Length(max=512)])
     icon = StringField('图标URL', validators=[Optional(), Length(max=256)])
+    icon_file = FileField('上传图标', validators=[FileAllowed(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'], '只允许上传图标文件')])
+    display_mode_override = SelectField('图标显示模式', choices=[
+        ('inherit', '继承全局'),
+        ('source', '优先源图标'),
+        ('local', '优先本地'),
+        ('imagebed', '优先图床')
+    ], default='inherit', validators=[Optional()])
+    source_provider_override = SelectField('源图标提供方', choices=[
+        ('inherit', '继承全局顺序'),
+        ('auto', '自动选择')
+    ], default='inherit', validators=[Optional()])
+    sync_local_mode = SelectField('本地同步策略', choices=[
+        ('inherit', '继承全局'),
+        ('always', '总是同步'),
+        ('never', '不同步')
+    ], default='inherit', validators=[Optional()])
+    sync_imagebed_mode = SelectField('图床同步策略', choices=[
+        ('inherit', '继承全局'),
+        ('always', '总是同步'),
+        ('never', '不同步')
+    ], default='inherit', validators=[Optional()])
     category_id = SelectField('分类', coerce=int, validators=[DataRequired()])
     sort_order = IntegerField('排序权重', validators=[Optional(), NumberRange(min=0, max=9999)], 
                             default=0, description='值越大排序越靠前，默认为0')
@@ -41,6 +62,20 @@ class WebsiteForm(FlaskForm):
     def __init__(self, *args, **kwargs):
         super(WebsiteForm, self).__init__(*args, **kwargs)
         self.category_id.choices = [(c.id, c.name) for c in Category.query.order_by(Category.order.asc()).all()]
+        try:
+            providers = SiteSettings.get_settings().get_icon_source_providers()
+        except Exception:
+            providers = []
+        self.source_provider_override.choices = [
+            ('inherit', '继承全局顺序'),
+            ('auto', '自动选择'),
+        ] + [
+            (
+                provider['id'],
+                f"{provider['label']}（已禁用）" if not provider.get('enabled', True) else provider['label']
+            )
+            for provider in providers
+        ]
 
 class InvitationForm(FlaskForm):
     count = IntegerField('生成数量', default=1, validators=[DataRequired()])

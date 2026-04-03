@@ -10,7 +10,35 @@ from app.admin import bp
 from app.admin.forms import WebsiteForm
 from app.admin.decorators import admin_required
 from app.admin.utils import trigger_vector_indexing
-from app.models import Category, Website, OperationLog
+from app.models import Category, Website, OperationLog, SiteSettings
+from app.utils.icon_service import (
+    delete_website_icon_assets,
+    download_icon_to_local,
+    get_website_icon_snapshot,
+    refresh_icon_from_source,
+    sync_icon_after_save,
+    upload_icon_to_imagebed,
+)
+
+
+def _apply_icon_form_defaults(form, website=None):
+    if not website or request.method != 'GET' or not website.icon_meta:
+        return
+
+    current_provider_override = website.icon_meta.source_provider_override or 'inherit'
+    if current_provider_override not in {'inherit', 'auto'}:
+        existing_choice_values = {value for value, _ in form.source_provider_override.choices}
+        if current_provider_override not in existing_choice_values:
+            form.source_provider_override.choices.append(
+                (current_provider_override, f'已移除的提供方（{current_provider_override}）')
+            )
+
+    if website.icon_meta.source_mode == 'manual_upload':
+        form.icon.data = ''
+    form.source_provider_override.data = current_provider_override
+    form.display_mode_override.data = website.icon_meta.display_mode_override or 'inherit'
+    form.sync_local_mode.data = website.icon_meta.sync_local_mode or 'inherit'
+    form.sync_imagebed_mode.data = website.icon_meta.sync_imagebed_mode or 'inherit'
 
 
 @bp.route('/websites')
@@ -86,8 +114,12 @@ def batch_delete_websites():
             
             db.session.add(operation_log)
         
-        # 删除选中的网站
-        deleted_count = Website.query.filter(Website.id.in_(website_ids)).delete(synchronize_session=False)
+        deleted_count = 0
+        for website in websites:
+            delete_website_icon_assets(website.id, delete_record=True)
+            db.session.delete(website)
+            deleted_count += 1
+
         db.session.commit()
         
         # 删除向量数据（在数据库提交成功后，避免影响事务）
@@ -150,6 +182,7 @@ def batch_update_websites():
 def add_website():
     form = WebsiteForm()
     if form.validate_on_submit():
+        settings = SiteSettings.get_settings()
         website = Website(
             title=form.title.data,
             url=form.url.data,
@@ -163,12 +196,23 @@ def add_website():
         )
         db.session.add(website)
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            uploaded_file=form.icon_file.data,
+            icon_url=form.icon.data,
+            auto_fetch=bool(settings.icon_auto_fetch_on_create),
+            source_provider_override=form.source_provider_override.data,
+            display_mode_override=form.display_mode_override.data,
+            sync_local_mode=form.sync_local_mode.data,
+            sync_imagebed_mode=form.sync_imagebed_mode.data,
+        )
+
+        category = Category.query.get(form.category_id.data) if form.category_id.data else None
+        category_name = category.name if category else None
         
         try:
             # 记录添加操作
-            category = Category.query.get(form.category_id.data) if form.category_id.data else None
-            category_name = category.name if category else None
-            
             operation_log = OperationLog(
                 user_id=current_user.id,
                 operation_type='ADD',
@@ -194,7 +238,7 @@ def add_website():
         
         flash('网站添加成功', 'success')
         return redirect(url_for('admin.websites'))
-    return render_template('admin/website_form.html', title='添加网站', form=form)
+    return render_template('admin/website_form.html', title='添加网站', form=form, icon_snapshot=None)
 
 
 @bp.route('/website/edit/<int:id>', methods=['GET', 'POST'])
@@ -203,6 +247,7 @@ def add_website():
 def edit_website(id):
     website = Website.query.get_or_404(id)
     form = WebsiteForm(obj=website)
+    _apply_icon_form_defaults(form, website)
     
     if form.validate_on_submit():
         # 记录修改前的值
@@ -226,6 +271,17 @@ def edit_website(id):
         website.sort_order = form.sort_order.data
         
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            uploaded_file=form.icon_file.data,
+            icon_url=form.icon.data,
+            auto_fetch=True,
+            source_provider_override=form.source_provider_override.data,
+            display_mode_override=form.display_mode_override.data,
+            sync_local_mode=form.sync_local_mode.data,
+            sync_imagebed_mode=form.sync_imagebed_mode.data,
+        )
         
         # 记录修改操作
         changes = {}
@@ -288,7 +344,64 @@ def edit_website(id):
         flash('网站更新成功', 'success')
         return redirect(url_for('admin.websites'))
         
-    return render_template('admin/website_form.html', title='编辑网站', form=form)
+    return render_template('admin/website_form.html', title='编辑网站', form=form, icon_snapshot=website.display_icon_info)
+
+
+@bp.route('/api/website/<int:id>/icon-action', methods=['POST'])
+@login_required
+@admin_required
+def api_website_icon_action(id):
+    website = Website.query.get_or_404(id)
+    data = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip()
+
+    try:
+        if action == 'refresh_source':
+            snapshot = refresh_icon_from_source(website, force=True, sync_local=False, sync_imagebed=False)
+            message = '源图标已刷新'
+        elif action == 'sync_local':
+            snapshot = get_website_icon_snapshot(website)
+            source_url = snapshot.get('source_url')
+            if not source_url:
+                snapshot = refresh_icon_from_source(website, force=True, sync_local=False, sync_imagebed=False)
+                source_url = snapshot.get('source_url')
+            if not source_url:
+                return jsonify({'success': False, 'message': '未找到可同步到本地的图标来源'}), 400
+
+            snapshot = download_icon_to_local(
+                website,
+                source_url,
+                update_legacy_icon=bool(snapshot.get('source_url') and source_url == snapshot.get('source_url')),
+            )
+            message = '已同步到本地'
+        elif action == 'sync_imagebed':
+            snapshot = get_website_icon_snapshot(website)
+            if not snapshot.get('has_local'):
+                source_url = snapshot.get('source_url')
+                if not source_url:
+                    snapshot = refresh_icon_from_source(website, force=True, sync_local=False, sync_imagebed=False)
+                    source_url = snapshot.get('source_url')
+                if not source_url:
+                    return jsonify({'success': False, 'message': '未找到可上传到图床的图标来源'}), 400
+                snapshot = download_icon_to_local(
+                    website,
+                    source_url,
+                    update_legacy_icon=bool(snapshot.get('source_url') and source_url == snapshot.get('source_url')),
+                )
+
+            snapshot = upload_icon_to_imagebed(website)
+            message = '已上传到图床'
+        else:
+            return jsonify({'success': False, 'message': '不支持的图标操作'}), 400
+
+        return jsonify({'success': True, 'message': message, 'snapshot': snapshot})
+    except Exception as exc:
+        current_app.logger.warning(f"执行图标操作失败 (website_id={id}, action={action}): {str(exc)}")
+        return jsonify({
+            'success': False,
+            'message': str(exc),
+            'snapshot': get_website_icon_snapshot(website),
+        }), 500
 
 
 @bp.route('/website/delete/<int:id>')
@@ -320,6 +433,7 @@ def delete_website(id):
     
     # 在删除数据库记录之前，先保存网站ID
     website_id = website.id
+    delete_website_icon_assets(website.id, delete_record=True)
     db.session.delete(website)
     db.session.commit()
     

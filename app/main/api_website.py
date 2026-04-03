@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 from app import db, csrf
 from app.main import bp
 from app.models import Website, Category, OperationLog, SiteSettings
+from app.utils.icon_service import delete_website_icon_assets, sync_icon_after_save
 import json
 import threading
 
@@ -26,6 +27,10 @@ def update_website(site_id):
         if not current_user.is_admin:
             return jsonify({"success": False, "message": "没有权限执行此操作"}), 403
         
+        old_title = site.title
+        old_description = site.description
+        old_category_id = site.category_id
+
         if 'title' in data:
             site.title = data['title']
         if 'url' in data:
@@ -36,17 +41,15 @@ def update_website(site_id):
             site.description = data['description']
         if 'is_private' in data:
             site.is_private = bool(data['is_private'])
-        # 记录修改前的值（用于判断是否需要更新向量）
-        old_title = site.title
-        old_description = site.description
-        old_category_id = site.category_id
-        
         if 'category_id' in data and isinstance(data['category_id'], int):
             category = Category.query.get(data['category_id'])
             if category:
                 site.category_id = data['category_id']
         
         db.session.commit()
+
+        if 'icon' in data or 'url' in data:
+            sync_icon_after_save(site, icon_url=data.get('icon') if 'icon' in data else None, auto_fetch=True)
         
         # 检查是否需要更新向量（标题、描述或分类变化时）
         needs_vector_update = (
@@ -70,7 +73,7 @@ def update_website(site_id):
                 "id": site.id,
                 "title": site.title,
                 "url": site.url,
-                "icon": site.icon,
+                "icon": site.display_icon_url,
                 "description": site.description,
                 "category_id": site.category_id,
                 "is_private": site.is_private
@@ -126,6 +129,9 @@ def api_update_website(id):
         website.sort_order = int(data['sort_order'])
     
     db.session.commit()
+
+    if 'icon' in data or 'url' in data:
+        sync_icon_after_save(website, icon_url=data.get('icon') if 'icon' in data else None, auto_fetch=True)
     
     changes = {}
     if old_title != website.title:
@@ -187,7 +193,7 @@ def api_update_website(id):
             'title': website.title,
             'url': website.url,
             'description': website.description,
-            'icon': website.icon,
+            'icon': website.display_icon_url,
             'is_featured': website.is_featured,
             'category_id': website.category_id,
             'sort_order': website.sort_order
@@ -229,6 +235,7 @@ def api_delete_website(id):
         
         # 在删除数据库记录之前，先删除向量数据
         website_id = website.id
+        delete_website_icon_assets(website.id, delete_record=True)
         db.session.delete(website)
         db.session.commit()
         
@@ -281,6 +288,9 @@ def api_modify_link():
             website.icon = data['icon']
         
         db.session.commit()
+
+        if 'icon' in data or 'url' in data:
+            sync_icon_after_save(website, icon_url=data.get('icon') if 'icon' in data else None, auto_fetch=True)
         
         changes = {}
         if old_title != website.title:
@@ -434,6 +444,12 @@ def quick_add_website():
         
         db.session.add(website)
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            icon_url=data.get('icon', '') or '',
+            auto_fetch=bool(SiteSettings.get_settings().icon_auto_fetch_on_create),
+        )
         
         category_name = Category.query.get(data['category_id']).name if data['category_id'] else None
         operation_log = OperationLog(
@@ -464,7 +480,7 @@ def quick_add_website():
                 'title': website.title,
                 'url': website.url,
                 'description': website.description,
-                'icon': website.icon,
+                'icon': website.display_icon_url,
                 'category_id': website.category_id
             }
         })
@@ -501,7 +517,7 @@ def check_url_exists():
                 'title': website.title,
                 'url': website.url,
                 'description': website.description,
-                'icon': website.icon,
+                'icon': website.display_icon_url,
                 'category_id': website.category_id,
                 'category_name': website.category.name if website.category else None,
                 'is_private': website.is_private

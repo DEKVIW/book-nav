@@ -27,6 +27,23 @@
     height: 24px;
     font-size: 14px;
   }
+
+  .icon-status-card {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1rem;
+    background: #f8fbff;
+  }
+
+  .icon-preview {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    object-fit: contain;
+    background: #fff;
+    border: 1px solid #dbe4f0;
+    padding: 6px;
+  }
 </style>
 {% endblock %} {% block admin_content %}
 <div class="card">
@@ -36,7 +53,7 @@
     </h5>
   </div>
   <div class="card-body">
-    <form method="POST" action="">
+    <form method="POST" action="" enctype="multipart/form-data">
       {{ form.hidden_tag() }} {% if form.title.data %}
       <input type="hidden" id="website_id" value="{{ request.view_args.id }}" />
       {% endif %}
@@ -91,8 +108,85 @@
         {% for error in form.icon.errors %}
         <div class="text-danger small">{{ error }}</div>
         {% endfor %}
-        <div class="form-text">可留空，将使用默认图标</div>
+        <div class="form-text">留空时会保留当前手动上传图标；未上传时则回退到自动抓取/全局策略。</div>
       </div>
+      <div class="mb-3">
+        {{ form.icon_file.label(class="form-label") }}
+        {{ form.icon_file(class="form-control") }}
+        {% for error in form.icon_file.errors %}
+        <div class="text-danger small">{{ error }}</div>
+        {% endfor %}
+        <div class="form-text">手动上传的图标优先级最高，适合源站图标缺失或不稳定的场景。</div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-3">
+          {{ form.source_provider_override.label(class="form-label") }}
+          {{ form.source_provider_override(class="form-select") }}
+          <div class="form-text">指定提供方时，会优先使用该来源，即使它在全局列表中被禁用。</div>
+        </div>
+        <div class="col-md-3">
+          {{ form.display_mode_override.label(class="form-label") }}
+          {{ form.display_mode_override(class="form-select") }}
+        </div>
+        <div class="col-md-3">
+          {{ form.sync_local_mode.label(class="form-label") }}
+          {{ form.sync_local_mode(class="form-select") }}
+        </div>
+        <div class="col-md-3">
+          {{ form.sync_imagebed_mode.label(class="form-label") }}
+          {{ form.sync_imagebed_mode(class="form-select") }}
+        </div>
+      </div>
+      {% if icon_snapshot %}
+      <div class="icon-status-card mb-3">
+        <div class="d-flex align-items-center gap-3">
+          {% if icon_snapshot.url %}
+          <img id="iconPreviewImage" class="icon-preview" src="{{ icon_snapshot.url }}" alt="{{ form.title.data or 'icon' }}">
+          <div id="iconPreviewFallback" class="default-site-icon d-none" style="width:42px;height:42px;font-size:18px;">
+            {{ (form.title.data or 'S')[:1] }}
+          </div>
+          {% else %}
+          <img id="iconPreviewImage" class="icon-preview d-none" src="" alt="{{ form.title.data or 'icon' }}">
+          <div id="iconPreviewFallback" class="default-site-icon" style="width:42px;height:42px;font-size:18px;">
+            {{ (form.title.data or 'S')[:1] }}
+          </div>
+          {% endif %}
+          <div>
+            <div class="fw-semibold">当前最终展示图标</div>
+            <div id="iconOriginText" class="small text-muted">
+              来源 {{ icon_snapshot.origin or '未命中' }}，显示模式 {{ icon_snapshot.display_mode }}
+            </div>
+            <div id="iconProviderText" class="small text-muted">
+              源提供方 {{ icon_snapshot.source_provider_label or '未命中' }}
+            </div>
+            <div id="iconStatusText" class="small text-muted">
+              fetch {{ icon_snapshot.fetch_status }} / local {{ icon_snapshot.local_status }} / imagebed {{ icon_snapshot.imagebed_status }}
+            </div>
+            {% if icon_snapshot.last_error %}
+            <div id="iconErrorText" class="small text-danger mt-1">{{ icon_snapshot.last_error }}</div>
+            {% else %}
+            <div id="iconErrorText" class="small text-danger mt-1 d-none"></div>
+            {% endif %}
+          </div>
+        </div>
+        {% if request.view_args.id %}
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary icon-inline-action" data-action="refresh_source">
+            刷新源图标
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-primary icon-inline-action" data-action="sync_local">
+            同步到本地
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-warning icon-inline-action" data-action="sync_imagebed">
+            上传到图床
+          </button>
+        </div>
+        <div class="form-text mt-2">
+          即时图标操作仅作用于当前已保存站点，不会保存当前未提交的表单修改。
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
       <div class="mb-3">
         {{ form.category_id.label(class="form-label") }} {{
         form.category_id(class="form-select") }} {% for error in
@@ -239,6 +333,9 @@
     const descriptionInput = document.querySelector(
       'textarea[name="description"]'
     );
+    const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
+    const websiteIdInput = document.getElementById("website_id");
+    const iconActionButtons = document.querySelectorAll(".icon-inline-action");
 
     // 处理公开/私有选项逻辑
     const publicRadio = document.getElementById("publicRadio");
@@ -367,6 +464,90 @@
           // 移除加载状态
           icon.classList.remove("btn-spin");
         });
+    });
+
+    function updateIconSnapshot(snapshot) {
+      if (!snapshot) {
+        return;
+      }
+
+      const previewImage = document.getElementById("iconPreviewImage");
+      const previewFallback = document.getElementById("iconPreviewFallback");
+      const originText = document.getElementById("iconOriginText");
+      const providerText = document.getElementById("iconProviderText");
+      const statusText = document.getElementById("iconStatusText");
+      const errorText = document.getElementById("iconErrorText");
+
+      if (originText) {
+        originText.textContent = `来源 ${snapshot.origin || "未命中"}，显示模式 ${snapshot.display_mode || "smart"}`;
+      }
+      if (statusText) {
+        statusText.textContent = `fetch ${snapshot.fetch_status} / local ${snapshot.local_status} / imagebed ${snapshot.imagebed_status}`;
+      }
+      if (providerText) {
+        providerText.textContent = `源提供方 ${snapshot.source_provider_label || "未命中"}`;
+      }
+      if (errorText) {
+        if (snapshot.last_error) {
+          errorText.textContent = snapshot.last_error;
+          errorText.classList.remove("d-none");
+        } else {
+          errorText.textContent = "";
+          errorText.classList.add("d-none");
+        }
+      }
+
+      if (snapshot.url) {
+        if (previewImage) {
+          previewImage.src = snapshot.url;
+          previewImage.classList.remove("d-none");
+        }
+        if (previewFallback) {
+          previewFallback.classList.add("d-none");
+        }
+      } else {
+        if (previewImage) {
+          previewImage.classList.add("d-none");
+        }
+        if (previewFallback) {
+          previewFallback.classList.remove("d-none");
+        }
+      }
+    }
+
+    iconActionButtons.forEach((button) => {
+      button.addEventListener("click", function () {
+        const websiteId = websiteIdInput ? websiteIdInput.value : "";
+        const action = this.dataset.action;
+        if (!websiteId || !action) {
+          return;
+        }
+
+        this.disabled = true;
+        fetch(`/admin/api/website/${websiteId}/icon-action`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfTokenInput ? csrfTokenInput.value : ""
+          },
+          body: JSON.stringify({ action })
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!data.success) {
+              alert(data.message || "图标操作失败");
+              return;
+            }
+            updateIconSnapshot(data.snapshot);
+            alert(data.message || "图标操作已完成");
+          })
+          .catch(() => {
+            alert("图标操作失败，请稍后重试");
+          })
+          .finally(() => {
+            this.disabled = false;
+          });
+      });
     });
 
     // 检查URL是否存在

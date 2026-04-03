@@ -1,10 +1,14 @@
 from datetime import datetime
+import json
 import random
 import string
+from flask import current_app, has_app_context
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db, login_manager
 from config import Config
+from sqlalchemy.orm import backref
+from sqlalchemy.exc import OperationalError
 
 # 定义网站和标签的多对多关系表
 website_tag = db.Table('website_tag',
@@ -144,6 +148,16 @@ class Website(db.Model):
     # 死链检测相关字段
     is_valid = db.Column(db.Boolean, default=True)  # 链接是否有效
     last_check = db.Column(db.DateTime, nullable=True)  # 最后检测时间
+
+    @property
+    def display_icon_url(self):
+        from app.utils.icon_service import resolve_display_icon_url
+        return resolve_display_icon_url(self)
+
+    @property
+    def display_icon_info(self):
+        from app.utils.icon_service import get_website_icon_snapshot
+        return get_website_icon_snapshot(self)
     
     def __repr__(self):
         return f'<Website {self.title}>'
@@ -168,6 +182,86 @@ class Website(db.Model):
             return user.id in visible_user_ids
             
         return False 
+
+
+class IconAsset(db.Model):
+    __tablename__ = 'icon_asset'
+
+    id = db.Column(db.Integer, primary_key=True)
+    domain_key = db.Column(db.String(255), index=True)
+    file_hash = db.Column(db.String(64), unique=True, index=True)
+    source_url = db.Column(db.String(512), index=True)
+    source_host = db.Column(db.String(255), index=True)
+    local_path = db.Column(db.String(512))
+    mime_type = db.Column(db.String(128))
+    imagebed_provider = db.Column(db.String(64))
+    imagebed_url = db.Column(db.String(1024))
+    imagebed_delete_url = db.Column(db.String(1024))
+    imagebed_payload_json = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<IconAsset {self.id} {self.file_hash}>'
+
+
+class WebsiteIcon(db.Model):
+    __tablename__ = 'website_icon'
+
+    id = db.Column(db.Integer, primary_key=True)
+    website_id = db.Column(db.Integer, db.ForeignKey('website.id'), unique=True, nullable=False, index=True)
+    icon_asset_id = db.Column(db.Integer, db.ForeignKey('icon_asset.id'))
+    domain_key = db.Column(db.String(255), index=True)
+    source_mode = db.Column(db.String(32), default='auto')
+    source_provider_override = db.Column(db.String(64), default='inherit')
+    display_mode_override = db.Column(db.String(32), default='inherit')
+    sync_local_mode = db.Column(db.String(32), default='inherit')
+    sync_imagebed_mode = db.Column(db.String(32), default='inherit')
+    fetch_status = db.Column(db.String(32), default='pending')
+    local_status = db.Column(db.String(32), default='pending')
+    imagebed_status = db.Column(db.String(32), default='pending')
+    last_fetch_at = db.Column(db.DateTime, nullable=True)
+    last_local_sync_at = db.Column(db.DateTime, nullable=True)
+    last_imagebed_sync_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    website = db.relationship(
+        'Website',
+        backref=backref('icon_meta', uselist=False, cascade='all, delete-orphan'),
+        uselist=False
+    )
+    icon_asset = db.relationship('IconAsset', backref=backref('website_icons', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<WebsiteIcon website={self.website_id} mode={self.source_mode}>'
+
+
+class IconSyncTask(db.Model):
+    __tablename__ = 'icon_sync_task'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_type = db.Column(db.String(64), nullable=False)
+    scope_type = db.Column(db.String(32), default='all')
+    params_json = db.Column(db.Text)
+    status = db.Column(db.String(32), default='pending')
+    total = db.Column(db.Integer, default=0)
+    processed = db.Column(db.Integer, default=0)
+    success = db.Column(db.Integer, default=0)
+    failed = db.Column(db.Integer, default=0)
+    skipped = db.Column(db.Integer, default=0)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    started_at = db.Column(db.DateTime, nullable=True)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    error_summary = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    created_by = db.relationship('User', backref='icon_sync_tasks')
+
+    def __repr__(self):
+        return f'<IconSyncTask {self.task_type} {self.status}>'
 
 
 class WebsiteVector(db.Model):
@@ -208,6 +302,16 @@ class SiteSettings(db.Model):
     # 移动端背景设置
     mobile_background_type = db.Column(db.String(32), default='none')  # 移动端背景类型
     mobile_background_url = db.Column(db.String(512), nullable=True)  # 移动端背景URL
+
+    # 图标系统设置
+    icon_display_mode = db.Column(db.String(32), default='smart')
+    icon_auto_fetch_on_create = db.Column(db.Boolean, default=False)
+    icon_default_sync_local = db.Column(db.Boolean, default=False)
+    icon_default_sync_imagebed = db.Column(db.Boolean, default=False)
+    icon_source_providers_json = db.Column(db.Text, nullable=True)
+    icon_imagebed_provider = db.Column(db.String(64), nullable=True)
+    icon_imagebed_api_url = db.Column(db.String(512), nullable=True)
+    icon_imagebed_token = db.Column(db.String(512), nullable=True)
     
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -294,9 +398,47 @@ class SiteSettings(db.Model):
     
     # 单例模式：确保只有一条记录
     @classmethod
+    def _database_path(cls):
+        db_uri = None
+        if has_app_context():
+            db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI')
+        if not db_uri:
+            db_uri = getattr(Config, 'SQLALCHEMY_DATABASE_URI', None)
+        if not db_uri or not db_uri.startswith('sqlite:///'):
+            return None
+        return db_uri.replace('sqlite:///', '', 1)
+
+    @classmethod
+    def _repair_legacy_schema(cls):
+        db_path = cls._database_path()
+        if not db_path:
+            return False
+
+        from app.utils.db_migration import migrate_site_settings_fields, migrate_webdav_config_table
+        from app.utils.icon_db_migration import migrate_icon_management_tables
+
+        migrate_site_settings_fields(db_path)
+        migrate_webdav_config_table(db_path)
+        migrate_icon_management_tables(db_path)
+        return True
+
+    @classmethod
     def get_settings(cls):
         """获取站点设置（单例模式）"""
-        settings = cls.query.first()
+        try:
+            settings = cls.query.first()
+        except OperationalError as exc:
+            message = str(exc).lower()
+            if 'site_settings' not in message or 'no such column' not in message:
+                raise
+
+            db.session.rollback()
+            db.session.remove()
+            repaired = cls._repair_legacy_schema()
+            if not repaired:
+                raise
+            settings = cls.query.first()
+
         if not settings:
             settings = cls()
             db.session.add(settings)
@@ -317,6 +459,20 @@ class SiteSettings(db.Model):
             return self.embedding_api_base_url, self.embedding_api_key
         # 回退到 AI 搜索配置
         return self.ai_api_base_url, self.ai_api_key
+
+    def get_icon_imagebed_config(self):
+        provider = (self.icon_imagebed_provider or '').strip().lower()
+        api_url = (self.icon_imagebed_api_url or '').strip()
+        token = (self.icon_imagebed_token or '').strip()
+        return provider, api_url, token
+
+    def get_icon_source_providers(self):
+        from app.main.utils import merge_icon_source_providers
+
+        return merge_icon_source_providers(self.icon_source_providers_json)
+
+    def set_icon_source_providers(self, providers):
+        self.icon_source_providers_json = json.dumps(providers or [], ensure_ascii=False)
     
     def __repr__(self):
         return f'<SiteSettings {self.site_name}>'

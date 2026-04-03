@@ -127,10 +127,10 @@
       style="animation-delay: {{ loop.index0 * 0.1 }}s"
     >
       <a href="{{ url_for('main.site', id=website.id) }}" class="website-card">
-        {% if website.icon %}
+        {% if website.display_icon_url %}
         <div class="website-icon">
           <img
-            src="{{ website.icon }}"
+            src="{{ website.display_icon_url }}"
             alt="{{ website.title }}"
             referrerpolicy="no-referrer"
             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"

@@ -2,22 +2,26 @@
 # -*- coding: utf-8 -*-
 """页面视图路由"""
 
-from flask import render_template, redirect, url_for, flash, request
+from flask import render_template, redirect, url_for, flash, request, current_app
 from flask_login import current_user, login_required
+from sqlalchemy.orm import joinedload
 from app import db
 from app.main import bp
-from app.models import Category, Website, SiteSettings
+from app.models import Category, Website, SiteSettings, WebsiteIcon
 from app.main.forms import WebsiteForm
+from app.utils.icon_service import delete_website_icon_assets, sync_icon_after_save
 from datetime import datetime
 
 
 @bp.route('/')
 def index():
     """首页"""
+    icon_load = joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+
     # 只获取一级分类（parent_id为None的分类）
     categories = Category.query.filter_by(parent_id=None).order_by(Category.order.desc()).all()
     
-    featured_sites_query = Website.query.filter_by(is_featured=True)
+    featured_sites_query = Website.query.options(icon_load).filter_by(is_featured=True)
     if not current_user.is_authenticated:
         featured_sites_query = featured_sites_query.filter_by(is_private=False)
     elif not current_user.is_admin:
@@ -29,7 +33,7 @@ def index():
     featured_sites = featured_sites_query.order_by(Website.views.desc()).limit(6).all()
     
     for category in categories:
-        websites_query = Website.query.filter_by(category_id=category.id)
+        websites_query = Website.query.options(icon_load).filter_by(category_id=category.id)
         if not current_user.is_authenticated:
             websites_query = websites_query.filter_by(is_private=False)
         elif not current_user.is_admin:
@@ -74,7 +78,7 @@ def index():
                 # 获取第一个二级分类（权重靠前的，order值最大的）
                 first_child = children[0]
                 # 查询第一个二级分类的网站
-                first_child_query = Website.query.filter_by(category_id=first_child.id)
+                first_child_query = Website.query.options(icon_load).filter_by(category_id=first_child.id)
                 if not current_user.is_authenticated:
                     first_child_query = first_child_query.filter_by(is_private=False)
                 elif not current_user.is_admin:
@@ -129,7 +133,8 @@ def category(id):
     
     highlight_id = request.args.get('highlight')
     
-    websites_query = Website.query.filter_by(category_id=id)
+    icon_load = joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+    websites_query = Website.query.options(icon_load).filter_by(category_id=id)
     
     if not current_user.is_authenticated:
         websites_query = websites_query.filter_by(is_private=False)
@@ -218,7 +223,8 @@ def search():
     if not query:
         return redirect(url_for('main.index'))
     
-    websites_query = Website.query.filter(
+    icon_load = joinedload(Website.icon_meta).joinedload(WebsiteIcon.icon_asset)
+    websites_query = Website.query.options(icon_load).filter(
         Website.title.contains(query) |
         Website.description.contains(query) |
         Website.url.contains(query)
@@ -266,6 +272,13 @@ def add():
         
         db.session.add(website)
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            uploaded_file=form.icon_file.data,
+            icon_url=form.icon.data or '',
+            auto_fetch=bool(SiteSettings.get_settings().icon_auto_fetch_on_create),
+        )
         
         category_name = Category.query.get(form.category_id.data).name if form.category_id.data and form.category_id.data != 0 else None
         operation_log = OperationLog(
@@ -308,6 +321,8 @@ def edit(id):
     form = WebsiteForm(obj=website)
     form.category_id.choices = [(c.id, c.name) for c in Category.query.order_by(Category.order.desc()).all()]
     form.category_id.choices.insert(0, (0, '-- 请选择分类 --'))
+    if request.method == 'GET' and website.icon_meta and website.icon_meta.source_mode == 'manual_upload':
+        form.icon.data = ''
     
     if form.validate_on_submit():
         from app.models import OperationLog
@@ -330,6 +345,13 @@ def edit(id):
         website.sort_order = form.sort_order.data
         
         db.session.commit()
+
+        sync_icon_after_save(
+            website,
+            uploaded_file=form.icon_file.data,
+            icon_url=form.icon.data or '',
+            auto_fetch=True,
+        )
         
         changes = {}
         if old_title != website.title:
@@ -387,7 +409,13 @@ def edit(id):
     if website.category_id is None:
         form.category_id.data = 0
     
-    return render_template('edit.html', title='编辑链接', form=form, website=website)
+    return render_template(
+        'edit.html',
+        title='编辑链接',
+        form=form,
+        website=website,
+        icon_snapshot=website.display_icon_info,
+    )
 
 
 @bp.route('/delete/<int:id>')
@@ -425,6 +453,7 @@ def delete(id):
     
     # 在删除数据库记录之前，先保存网站ID
     website_id = website.id
+    delete_website_icon_assets(website.id, delete_record=True)
     db.session.delete(website)
     db.session.commit()
     
@@ -455,7 +484,7 @@ def goto(website_id):
         db.session.commit()
         return redirect(website.url)
     
-    settings = SiteSettings.query.first()
+    settings = SiteSettings.get_settings()
     
     if current_user.is_authenticated and current_user.is_admin:
         countdown = settings.admin_transition_time

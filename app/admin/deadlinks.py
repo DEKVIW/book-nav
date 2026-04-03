@@ -18,6 +18,7 @@ from app import db
 from app.admin import bp
 from app.admin.decorators import superadmin_required
 from app.models import Website, DeadlinkCheck, OperationLog
+from app.utils.icon_service import delete_website_icon_assets
 
 
 # 全局变量，用于跟踪死链检测任务状态
@@ -194,7 +195,7 @@ def deadlink_results():
                 'id': website.id,
                 'title': website.title,
                 'url': website.url,
-                'icon': website.icon,
+                'icon': website.display_icon_url,
                 'category_name': category_name,
                 'error_type': check.error_type or '未知错误',
                 'error_message': check.error_message or '无错误信息'
@@ -312,8 +313,11 @@ def delete_deadlinks():
             )
             db.session.add(log)
         
-        # 删除网站
-        delete_count = Website.query.filter(Website.id.in_(link_ids)).delete(synchronize_session=False)
+        delete_count = 0
+        for website in websites:
+            delete_website_icon_assets(website.id, delete_record=True)
+            db.session.delete(website)
+            delete_count += 1
         
         # 提交事务
         db.session.commit()

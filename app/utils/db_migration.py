@@ -169,9 +169,21 @@ def migrate_site_settings_fields(db_path: str) -> int:
             ('webdav_last_backup_time', 'DATETIME'),
             ('webdav_last_backup_status', 'VARCHAR(256)')
         ]
+
+        # 图标管理字段
+        icon_fields = [
+            ('icon_display_mode', "VARCHAR(32) DEFAULT 'smart'"),
+            ('icon_auto_fetch_on_create', 'BOOLEAN DEFAULT 0'),
+            ('icon_default_sync_local', 'BOOLEAN DEFAULT 0'),
+            ('icon_default_sync_imagebed', 'BOOLEAN DEFAULT 0'),
+            ('icon_source_providers_json', 'TEXT'),
+            ('icon_imagebed_provider', 'VARCHAR(64)'),
+            ('icon_imagebed_api_url', 'VARCHAR(512)'),
+            ('icon_imagebed_token', 'VARCHAR(512)')
+        ]
         
         # 合并所有需要检查的字段
-        all_fields = ai_fields + vector_fields + transition_fields + announcement_fields + background_fields + webdav_fields
+        all_fields = ai_fields + vector_fields + transition_fields + announcement_fields + background_fields + webdav_fields + icon_fields
         
         added_count = 0
         for field_name, field_def in all_fields:

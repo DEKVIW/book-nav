@@ -1,0 +1,1453 @@
+{% extends "admin/base.html" %}
+
+{% block admin_head %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+  .icon-page{display:flex;flex-direction:column;gap:1.5rem}
+  .icon-form-stack{display:flex;flex-direction:column;gap:1.5rem}
+  .icon-page .card{border:1px solid #dbe5f0;border-radius:22px;box-shadow:0 16px 36px rgba(15,23,42,.05);overflow:hidden}
+  .icon-page .card>.card-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.15rem 1.25rem;border-bottom:1px solid #ecf2f8;background:linear-gradient(180deg,#fff,#f8fbff);font-weight:700;color:#0f172a}
+  .icon-page .card>.card-body{padding:1.25rem}
+  .icon-page>.d-flex.justify-content-between.align-items-center.mb-4{display:flex!important}
+  .icon-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem}
+  .icon-summary-card{padding:1rem 1.05rem;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 24px rgba(15,23,42,.04)}
+  .icon-summary-card .label{color:#64748b;font-size:.85rem;font-weight:600}
+  .icon-summary-card .value{margin-top:.45rem;color:#0f172a;font-size:1.9rem;font-weight:700;line-height:1.1}
+  .icon-page-nav{display:flex;flex-wrap:wrap;gap:.75rem;padding:.85rem 1rem;border:1px solid #dbe5f0;border-radius:18px;background:rgba(248,251,255,.92)}
+  .icon-page-nav-link{display:inline-flex;align-items:center;justify-content:center;padding:.52rem .95rem;border:1px solid #d6e4f3;border-radius:999px;background:#fff;color:#334155;font-size:.9rem;font-weight:600;text-decoration:none;transition:all .2s ease}
+  .icon-page-nav-link:hover{border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
+  .icon-card-intro{margin-bottom:1rem;padding:.9rem 1rem;border:1px dashed #c7d7ea;border-radius:16px;background:#f8fbff;color:#64748b;font-size:.88rem;line-height:1.7}
+  .icon-card-settings,.icon-card-providers,.icon-card-tasks,.icon-card-problems{scroll-margin-top:1.25rem}
+  .icon-card-settings{order:1}
+  .icon-card-providers{order:2}
+  .icon-card-tasks{order:3}
+  .icon-card-problems{order:4}
+  .icon-section+.icon-section{margin-top:1rem}
+  .icon-section{padding:1rem;border:1px solid #e6edf5;border-radius:18px;background:#f8fbff}
+  .icon-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}
+  .icon-section h4{margin:0;color:#0f172a;font-size:1rem;font-weight:700}
+  .icon-section p{margin:.35rem 0 0;color:#64748b;font-size:.88rem;line-height:1.6}
+  .icon-section-tag{display:inline-flex;align-items:center;padding:.28rem .72rem;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.78rem;font-weight:700;line-height:1;white-space:nowrap}
+  .icon-workflow-grid,.icon-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+  .icon-field{padding:.95rem;border:1px solid #dde7f1;border-radius:16px;background:#fff}
+  .icon-field .form-label{margin-bottom:.55rem;color:#334155;font-weight:600}
+  .icon-field-note{margin-top:.55rem;color:#64748b;font-size:.82rem;line-height:1.65}
+  .icon-note{padding:.9rem 1rem;border:1px dashed #c7d7ea;border-radius:14px;background:#fff;color:#64748b;font-size:.88rem;line-height:1.65}
+  .icon-note strong{color:#0f172a}
+  .icon-toggle-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.85rem;margin-top:1rem}
+  .icon-toggle{padding:.95rem 1rem;border:1px solid #dbe5f0;border-radius:16px;background:#fff}
+  .icon-toggle .form-check{margin:0}
+  .icon-toggle .form-check-label{display:block;color:#1e293b;font-weight:600}
+  .icon-toggle-note{margin-top:.35rem;color:#64748b;font-size:.82rem;line-height:1.5}
+  .icon-step-label{display:inline-flex;align-items:center;justify-content:center;padding:.22rem .65rem;border-radius:999px;background:#e0f2fe;color:#075985;font-size:.76rem;font-weight:700}
+  .icon-status-row{display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.75rem}
+  .icon-status-chip,.status-badge,.mini-badge,.provider-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .72rem;border-radius:999px;font-size:.8rem;font-weight:600;line-height:1;white-space:nowrap}
+  .icon-status-chip,.provider-badge,.status-badge,.mini-badge{background:#f8fafc;color:#475569}
+  .icon-status-chip.ready,.status-badge[data-status="completed"],.status-badge[data-status="success"],.mini-badge[data-status="success"]{background:#ecfdf5;color:#047857}
+  .icon-status-chip.off,.status-badge[data-status="idle"]{background:#f8fafc;color:#64748b}
+  .status-badge[data-status="pending"],.status-badge[data-status="running"],.mini-badge[data-status="pending"],.mini-badge[data-status="running"]{background:#eff6ff;color:#1d4ed8}
+  .status-badge[data-status="failed"],.mini-badge[data-status="failed"]{background:#fef2f2;color:#b91c1c}
+  .is-hidden{display:none!important}
+  .task-layout{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(0,1.1fr);gap:1rem}
+  .task-action-card{padding:1rem;border:1px solid #dce6f0;border-radius:18px;background:#fff}
+  .task-action-title{margin-bottom:.85rem;color:#0f172a;font-size:1rem;font-weight:700}
+  .task-actions{display:flex;flex-direction:column;gap:.75rem}
+  .task-button-grid{display:grid;gap:.75rem}
+  .task-button-grid-primary{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .task-button-grid-secondary{grid-template-columns:minmax(0,1.35fr) minmax(180px,.85fr)}
+  .icon-task-btn{min-width:0;min-height:44px;border-radius:14px;white-space:normal;text-align:center;display:flex;align-items:center;justify-content:center;line-height:1.35;padding:.65rem .85rem}
+  .task-live{padding:1rem;border:1px solid #dbe7f3;border-radius:18px;background:linear-gradient(180deg,#fff,#f8fbff)}
+  .task-live-top{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;margin-bottom:.85rem}
+  .task-live-eyebrow{margin-bottom:.35rem;color:#64748b;font-size:.78rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+  .task-live-title{color:#0f172a;font-size:1rem;font-weight:700;line-height:1.4}
+  .task-live-status,.task-live-meta{color:#475569;font-size:.9rem;line-height:1.6}
+  .task-live-status{margin-bottom:.8rem}
+  .icon-progress{height:.72rem;border-radius:999px;background:#e2e8f0;overflow:hidden}
+  #taskProgress{border-radius:999px;background:linear-gradient(90deg,#38bdf8,#2563eb);transition:width .25s ease}
+  #taskProgress.is-success{background:linear-gradient(90deg,#34d399,#16a34a)}
+  #taskProgress.is-failed{background:linear-gradient(90deg,#fb7185,#dc2626)}
+  .task-error{margin-top:.75rem;color:#b45309;font-size:.84rem;line-height:1.55}
+  .task-history-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:1.25rem 0 .9rem}
+  .task-history-scroll{max-height:520px;overflow-y:auto;padding-right:.2rem}
+  .task-history-scroll .table{margin-bottom:0;border-collapse:separate;border-spacing:0 .8rem}
+  .task-history-scroll thead th{border:0;color:#64748b;font-size:.8rem;font-weight:700;text-transform:uppercase}
+  .task-history-scroll tbody td{padding:.95rem .8rem;vertical-align:top;background:#fff;border-top:1px solid #dce6f0;border-bottom:1px solid #dce6f0}
+  .task-history-scroll tbody td:first-child{border-left:1px solid #dce6f0;border-radius:16px 0 0 16px}
+  .task-history-scroll tbody td:last-child{border-right:1px solid #dce6f0;border-radius:0 16px 16px 0}
+  .problem-site-scroll{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;max-height:720px;overflow-y:auto;padding-right:.2rem;align-content:start}
+  .problem-site{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1rem;padding:1rem;border:1px solid #dce6f0;border-radius:18px;background:#fff;min-width:0}
+  .problem-site-main{display:flex;align-items:center;gap:.85rem;min-width:0}
+  .problem-site-text{min-width:0;overflow:hidden}
+  .problem-site-icon,.problem-site-fallback{width:44px;height:44px;flex-shrink:0;border-radius:14px;border:1px solid #dbe5f0}
+  .problem-site-icon{object-fit:contain;background:#f8fafc;padding:5px}
+  .problem-site-fallback{display:inline-flex;align-items:center;justify-content:center;background:#eff6ff;color:#2563eb;font-weight:700}
+  .problem-site-title{display:block;max-width:100%;color:#0f172a;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.45}
+  .problem-site-url{display:block;margin-top:.3rem;color:#64748b;font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .problem-site-meta{margin-top:.35rem;color:#64748b;font-size:.82rem;line-height:1.55}
+  .problem-site-actions{display:grid;gap:.6rem;align-content:center;min-width:128px}
+  .problem-site-actions .btn{width:100%;min-height:38px;white-space:nowrap}
+  .provider-table{max-height:700px;overflow:auto;padding-right:.2rem}
+  .provider-table .table{min-width:980px;margin-bottom:0}
+  .provider-table thead th{position:sticky;top:0;z-index:1;background:#f8fbff;color:#64748b;font-size:.8rem;text-transform:uppercase;border-bottom:1px solid #dbe5f0}
+  .provider-table tbody td{padding:.9rem .75rem;background:#fff;vertical-align:top}
+  .provider-table tbody tr+tr td{border-top:1px solid #eef2f7}
+  .provider-table tbody tr.disabled td{background:#f8fafc}
+  .provider-inline-note{color:#64748b;font-size:.8rem;line-height:1.5}
+  .provider-template-input,.provider-description-input,.provider-label-input{min-width:220px}
+  .provider-description-input{min-height:96px;resize:vertical}
+  .truncate-1,.truncate-2{overflow:hidden}
+  .truncate-1{text-overflow:ellipsis;white-space:nowrap}
+  .truncate-2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+  @media (max-width:1199.98px){
+    .icon-workflow-grid,.icon-grid,.task-layout,.icon-toggle-grid{grid-template-columns:1fr}
+    .task-button-grid-primary{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .task-button-grid-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width:991.98px){
+    .icon-page>.d-flex.justify-content-between.align-items-center.mb-4{flex-direction:column;align-items:flex-start!important;gap:.85rem}
+    .problem-site-scroll{grid-template-columns:1fr}
+    .problem-site{grid-template-columns:1fr}
+    .problem-site-actions{grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+  }
+  @media (max-width:767.98px){
+    .icon-page .card>.card-header,.icon-section-head,.task-live-top,.task-history-head{flex-direction:column;align-items:flex-start}
+    .icon-page-nav{overflow-x:auto;flex-wrap:nowrap;padding-bottom:.35rem}
+    .task-button-grid-primary,.task-button-grid-secondary{grid-template-columns:1fr}
+    .task-history-scroll thead{display:none}
+    .task-history-scroll .table,.task-history-scroll tbody,.task-history-scroll tr,.task-history-scroll td{display:block;width:100%}
+    .task-history-scroll tbody tr{border:1px solid #dce6f0;border-radius:16px;background:#fff;padding:.95rem;margin-bottom:.9rem}
+    .task-history-scroll tbody td{border:0!important;border-radius:0!important;padding:.2rem 0;background:transparent}
+    .provider-table .table{min-width:780px}
+    .problem-site-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width:575.98px){
+    .icon-page>.d-flex.justify-content-between.align-items-center.mb-4 .d-flex.gap-2{width:100%;flex-direction:column}
+    .icon-page>.d-flex.justify-content-between.align-items-center.mb-4 .d-flex.gap-2 .btn{width:100%}
+    .problem-site-actions{grid-template-columns:1fr}
+  }
+</style>
+{% endblock %}
+
+{% block admin_content %}
+<div class="icon-page">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-image"></i> 图标管理</h2>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.websites') }}" class="btn btn-outline-primary">
+        <i class="bi bi-globe"></i> 返回站点管理
+      </a>
+      <button type="submit" form="iconManagementForm" class="btn btn-primary">
+        <i class="bi bi-save"></i> 保存设置
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span><i class="bi bi-bar-chart-line"></i> 概览统计</span>
+    </div>
+    <div class="card-body">
+      <div class="icon-summary-grid">
+        <div class="icon-summary-card">
+          <div class="label">网站总数</div>
+          <div class="value">{{ summary.total_websites }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">源图标可用</div>
+          <div class="value">{{ summary.source_available }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">本地图标可用</div>
+          <div class="value">{{ summary.local_available }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">图床图标可用</div>
+          <div class="value">{{ summary.imagebed_available }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">手动上传</div>
+          <div class="value">{{ summary.manual_upload_count }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">共享资产</div>
+          <div class="value">{{ summary.shared_asset_count }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">显示缺失</div>
+          <div class="value text-danger">{{ summary.display_missing }}</div>
+        </div>
+        <div class="icon-summary-card">
+          <div class="label">失败项目</div>
+          <div class="value text-warning">{{ summary.fetch_failed + summary.local_failed + summary.imagebed_failed }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="icon-page-nav" aria-label="页面导航">
+    <a class="icon-page-nav-link" href="#icon-settings">全局设置</a>
+    <a class="icon-page-nav-link" href="#icon-providers">来源提供方</a>
+    <a class="icon-page-nav-link" href="#icon-tasks">批量任务</a>
+    <a class="icon-page-nav-link" href="#icon-problems">问题站点</a>
+  </div>
+
+  <form method="post" id="iconManagementForm" class="icon-form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="card icon-card-settings" id="icon-settings">
+      <div class="card-header">
+        <span><i class="bi bi-sliders"></i> 全局设置</span>
+      </div>
+      <div class="card-body">
+        <div class="icon-card-intro">
+          这里仅配置图标功能的日常默认行为。来源优先级、批量任务和异常站点处理分别在下面独立管理，这样配置路径更清楚，也更不容易误操作。
+        </div>
+
+        <div class="icon-section">
+          <div class="icon-section-head">
+            <div>
+              <h4>默认工作流</h4>
+              <p>先决定前台优先显示什么，再决定新建站点抓取成功后是否自动保存到本地或上传到图床。</p>
+            </div>
+            <span class="icon-section-tag">日常必配</span>
+          </div>
+
+          <div class="icon-workflow-grid">
+            <div class="icon-field">
+              <label class="form-label" for="iconDisplayMode">前台图标显示优先级</label>
+              <select class="form-select" id="iconDisplayMode" name="icon_display_mode">
+                <option value="smart" {% if settings.icon_display_mode == 'smart' %}selected{% endif %}>推荐：优先本地，缺失时自动回退</option>
+                <option value="source" {% if settings.icon_display_mode == 'source' %}selected{% endif %}>尽量显示网站原图标</option>
+                <option value="local" {% if settings.icon_display_mode == 'local' %}selected{% endif %}>优先显示本地缓存图标</option>
+                <option value="imagebed" {% if settings.icon_display_mode == 'imagebed' %}selected{% endif %}>优先显示图床地址</option>
+              </select>
+              <div class="icon-field-note">推荐保持“智能模式”，兼顾加载速度、稳定性和回退能力。</div>
+            </div>
+
+            <div class="icon-note">
+              <strong>推荐组合</strong><br>
+              默认建议开启“自动获取”和“自动保存到本地”。<br>
+              只有在你已经完成图床接入时，再开启“自动上传到图床”。
+            </div>
+          </div>
+
+          <div class="icon-toggle-grid">
+            <div class="icon-toggle">
+              <div class="icon-step-label">步骤 1</div>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="autoFetch" name="icon_auto_fetch_on_create" {% if settings.icon_auto_fetch_on_create %}checked{% endif %}>
+                <label class="form-check-label" for="autoFetch">新建站点后自动获取图标</label>
+              </div>
+              <div class="icon-toggle-note">创建站点后自动尝试解析来源图标，减少手工补录。</div>
+            </div>
+
+            <div class="icon-toggle">
+              <div class="icon-step-label">步骤 2</div>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="syncLocal" name="icon_default_sync_local" {% if settings.icon_default_sync_local %}checked{% endif %}>
+                <label class="form-check-label" for="syncLocal">抓取成功后自动保存到本地</label>
+              </div>
+              <div class="icon-toggle-note">建议开启，便于缓存、复用，并减少前台对外部来源的依赖。</div>
+            </div>
+
+            <div class="icon-toggle">
+              <div class="icon-step-label">步骤 3</div>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="syncImagebed" name="icon_default_sync_imagebed" {% if settings.icon_default_sync_imagebed %}checked{% endif %}>
+                <label class="form-check-label" for="syncImagebed">抓取成功后自动上传到图床</label>
+              </div>
+              <div class="icon-toggle-note">仅在图床 API、Token 都已配置完成后再开启。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="icon-section">
+          <div class="icon-section-head">
+            <div>
+              <h4>图床配置</h4>
+              <p>只有在需要图床托管，或前台优先显示图床地址时，才需要配置这里。</p>
+            </div>
+            <span class="icon-section-tag">按需启用</span>
+          </div>
+
+          <div class="icon-grid">
+            <div class="icon-field">
+              <label class="form-label" for="iconImagebedProvider">图床服务</label>
+              <select class="form-select" id="iconImagebedProvider" name="icon_imagebed_provider">
+                <option value="" {% if not settings.icon_imagebed_provider %}selected{% endif %}>未启用</option>
+                <option value="easyimage" {% if settings.icon_imagebed_provider == 'easyimage' %}selected{% endif %}>EasyImage</option>
+              </select>
+              <div class="icon-field-note">未启用时，系统不会自动上传到图床，也不建议把显示优先级设置为图床。</div>
+            </div>
+
+            <div class="icon-field">
+              <div class="form-label">当前状态</div>
+              <div class="icon-status-row">
+                <span class="icon-status-chip {% if settings.icon_imagebed_provider %}ready{% else %}off{% endif %}">
+                  服务：{% if settings.icon_imagebed_provider %}已启用{% else %}未启用{% endif %}
+                </span>
+                <span class="icon-status-chip {% if has_imagebed_api_url %}ready{% else %}off{% endif %}">
+                  API URL：{% if has_imagebed_api_url %}已保存{% else %}未设置{% endif %}
+                </span>
+                <span class="icon-status-chip {% if has_imagebed_token %}ready{% else %}off{% endif %}">
+                  Token：{% if has_imagebed_token %}已保存{% else %}未设置{% endif %}
+                </span>
+              </div>
+              <div class="icon-field-note">敏感信息不会在页面回显，只有重新填写时才会更新。</div>
+            </div>
+          </div>
+
+          <div id="imagebedConfigFields" class="{% if not settings.icon_imagebed_provider %}is-hidden{% endif %}">
+            <div class="icon-grid mt-3">
+              <div class="icon-field">
+                <label class="form-label" for="iconImagebedApiUrl">图床 API URL</label>
+                <input type="text" class="form-control" id="iconImagebedApiUrl" name="icon_imagebed_api_url" value="" placeholder="留空则保持现有地址，重新输入可更新">
+                <div class="icon-field-note">填写上传接口地址；留空表示保持当前值不变。</div>
+                <div class="form-check mt-3">
+                  <input class="form-check-input" type="checkbox" value="1" id="clearApiUrl" name="clear_icon_imagebed_api_url">
+                  <label class="form-check-label" for="clearApiUrl">清空已保存的图床 API URL</label>
+                </div>
+              </div>
+
+              <div class="icon-field">
+                <label class="form-label" for="iconImagebedToken">图床 Token</label>
+                <input type="password" class="form-control" id="iconImagebedToken" name="icon_imagebed_token" value="" placeholder="留空则保持现有 Token，重新输入可更新">
+                <div class="icon-field-note">只在需要更新凭证时重新填写；否则保持为空即可。</div>
+                <div class="form-check mt-3">
+                  <input class="form-check-input" type="checkbox" value="1" id="clearToken" name="clear_icon_imagebed_token">
+                  <label class="form-check-label" for="clearToken">清空已保存的图床 Token</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="imagebedDisabledNote" class="icon-note mt-3 {% if settings.icon_imagebed_provider %}is-hidden{% endif %}">
+            当前未启用图床。如果你现在只想先完成图标本地化，这里可以先留空；后续需要图床托管时，再补充 API URL 和 Token 即可。
+          </div>
+        </div>
+
+        <div class="icon-section">
+          <div class="icon-section-head">
+            <div>
+              <h4>高级操作</h4>
+              <p>仅在你调整过来源规则、代理策略，或想批量刷新历史 auto 站点时使用。</p>
+            </div>
+            <span class="icon-section-tag">谨慎使用</span>
+          </div>
+
+          <div class="icon-note">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="refreshAutoSourceUrls" name="refresh_auto_source_urls">
+              <label class="form-check-label" for="refreshAutoSourceUrls">按当前来源规则重算已有 auto 站点的源地址</label>
+            </div>
+            <div class="icon-field-note">只会刷新 auto 模式站点，不覆盖手动上传或手动 URL。若前台当前仍优先显示本地或图床，前端展示不会立即切换。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card icon-card-tasks" id="icon-tasks">
+      <div class="card-header">
+        <span><i class="bi bi-lightning"></i> 批量任务与任务记录</span>
+      </div>
+      <div class="card-body">
+        <div class="icon-card-intro">
+          这里负责“立刻执行一次”的运维动作，不会改动上面的默认规则设置。适合在补图、重试或切换来源策略后手动跑一轮。
+        </div>
+
+        <div class="task-layout">
+          <div class="task-action-card">
+            <div class="task-action-title">立即执行</div>
+            <div class="task-actions">
+              <div class="task-button-grid task-button-grid-primary">
+                <button type="button" class="btn btn-outline-primary icon-task-btn" data-task-type="sync_missing">
+                  {{ task_labels.get('sync_missing', '补齐缺失图标') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary icon-task-btn" data-task-type="sync_local">
+                  {{ task_labels.get('sync_local', '同步到本地') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary icon-task-btn" data-task-type="sync_imagebed">
+                  {{ task_labels.get('sync_imagebed', '同步到图床') }}
+                </button>
+              </div>
+              <div class="task-button-grid task-button-grid-secondary">
+                <button type="button" class="btn btn-outline-primary icon-task-btn" data-task-type="refresh_source">
+                  {{ task_labels.get('refresh_source', '按当前规则刷新源地址') }}
+                </button>
+                <button type="button" class="btn btn-outline-primary icon-task-btn" data-task-type="retry_failed">
+                  {{ task_labels.get('retry_failed', '重试失败项') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="taskPanel" class="task-live">
+            <div class="task-live-top">
+              <div>
+                <div class="task-live-eyebrow">当前任务</div>
+                <div id="taskTitle" class="task-live-title">{{ latest_task.task_type and task_labels.get(latest_task.task_type, latest_task.task_type) or '暂无任务' }}</div>
+              </div>
+              <span id="taskStatusBadge" class="status-badge" data-status="{% if latest_task.id %}{{ latest_task.status }}{% else %}idle{% endif %}">
+                {% if latest_task.id %}{{ latest_task.status }}{% else %}idle{% endif %}
+              </span>
+            </div>
+            <div id="taskStatus" class="task-live-status">
+              {% if latest_task.id %}
+              状态：{{ latest_task.status }}，进度 {{ latest_task.percent }}%
+              {% else %}
+              还没有执行过图标任务
+              {% endif %}
+            </div>
+            <div class="progress icon-progress">
+              <div id="taskProgress" class="progress-bar {% if latest_task.status == 'completed' %}is-success{% elif latest_task.status == 'failed' %}is-failed{% endif %}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ latest_task.percent or 0 }}" style="width: {{ latest_task.percent or 0 }}%"></div>
+            </div>
+            <div class="task-live-meta mt-3" id="taskMeta">
+              {% if latest_task.id %}
+              已处理 {{ latest_task.processed }}/{{ latest_task.total }}，成功 {{ latest_task.success }}，失败 {{ latest_task.failed }}，跳过 {{ latest_task.skipped }}，耗时 {{ latest_task.elapsed_time }}
+              {% endif %}
+            </div>
+            <div class="task-live-error task-error truncate-2" id="taskError" {% if latest_task.error_summary %}title="{{ latest_task.error_summary }}"{% endif %}>
+              {% if latest_task.error_summary %}{{ latest_task.error_summary }}{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="task-history-head">
+          <div class="fw-semibold"><i class="bi bi-clock-history"></i> 最近任务记录</div>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="clearTaskHistory">一键清空</button>
+        </div>
+        {% if recent_tasks %}
+        <div class="table-responsive task-history-scroll">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>任务</th>
+                <th>状态</th>
+                <th>进度</th>
+                <th>耗时</th>
+                <th class="text-end">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for task in recent_tasks %}
+              <tr>
+                <td>
+                  <div class="truncate-1 fw-semibold" title="{{ task.label }}">{{ task.label }}</div>
+                </td>
+                <td>
+                  <span class="mini-badge" data-status="{{ task.status }}">{{ task.status }}</span>
+                  {% if task.error_summary %}
+                  <div class="task-error truncate-2" title="{{ task.error_summary }}">{{ task.error_summary }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ task.processed }}/{{ task.total }}</td>
+                <td>{{ task.elapsed_time }}</td>
+                <td class="text-end">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    data-delete-task-id="{{ task.id }}"
+                    {% if task.is_running %}disabled{% endif %}
+                  >
+                    删除
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-muted">暂无任务记录。</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card icon-card-problems" id="icon-problems">
+      <div class="card-header">
+        <span><i class="bi bi-exclamation-triangle"></i> 问题站点</span>
+      </div>
+      <div class="card-body">
+        <div class="icon-card-intro">
+          这里列出当前图标缺失、同步失败或需要你手动处理的站点。站点标题和 URL 过长时会省略显示，悬停可查看完整内容。
+        </div>
+
+        {% if problem_sites %}
+        <div class="problem-site-scroll">
+          {% for item in problem_sites %}
+          <div class="problem-site">
+            <div class="problem-site-main">
+              {% if item.snapshot.url %}
+              <img class="problem-site-icon" src="{{ item.snapshot.url }}" alt="{{ item.website.title }}" loading="lazy" decoding="async">
+              {% else %}
+              <div class="problem-site-fallback">{{ item.website.title[:1] }}</div>
+              {% endif %}
+              <div class="problem-site-text">
+                <div class="problem-site-title" title="{{ item.website.title }}">{{ item.website.title }}</div>
+                <div class="problem-site-url" title="{{ item.website.url }}">{{ item.website.url }}</div>
+                <div class="problem-site-meta">
+                  来源状态 {{ item.snapshot.fetch_status }} / 本地 {{ item.snapshot.local_status }} / 图床 {{ item.snapshot.imagebed_status }}
+                </div>
+                <div class="problem-site-meta">
+                  当前来源提供方 {{ item.snapshot.source_provider_label or '未命中' }}
+                </div>
+              </div>
+            </div>
+            <div class="problem-site-actions">
+              <button type="button" class="btn btn-sm btn-outline-primary" data-site-action="sync_local" data-website-id="{{ item.website.id }}">本地化</button>
+              <button type="button" class="btn btn-sm btn-outline-warning" data-site-action="sync_imagebed" data-website-id="{{ item.website.id }}">上传图床</button>
+              <a href="{{ url_for('admin.edit_website', id=item.website.id) }}" class="btn btn-sm btn-outline-secondary">处理</a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted">最近没有发现明显的图标异常站点。</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card icon-card-providers" id="icon-providers">
+      <div class="card-header">
+        <span><i class="bi bi-diagram-3"></i> 来源提供方管理</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="addCustomProvider">
+          <i class="bi bi-plus-lg"></i> 添加自定义代理
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="icon-card-intro">
+          这里管理系统“从哪里获取图标，以及按什么顺序尝试”。排序数字越小越先尝试；禁用原站后，自动模式不会再走原站解析。
+        </div>
+
+        <div class="icon-note mb-3">
+          新增自定义代理时，模板必须包含 <code>{domain}</code>，可选使用 <code>{size}</code>。这部分属于来源策略，不会改动上面的日常默认规则。
+        </div>
+
+        <div class="table-responsive provider-table">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>启用</th>
+                <th>名称</th>
+                <th>类型</th>
+                <th>优先级</th>
+                <th>模板 / 说明</th>
+                <th class="text-end">操作</th>
+              </tr>
+            </thead>
+            <tbody id="providerRows">
+              {% for provider in source_providers %}
+              <tr
+                class="provider-row"
+                data-provider-id="{{ provider.id }}"
+                data-provider-builtin="{{ 1 if provider.builtin else 0 }}"
+                data-provider-kind="{{ provider.kind }}"
+              >
+                <td>
+                  <input
+                    class="form-check-input provider-enabled"
+                    type="checkbox"
+                    {% if provider.enabled %}checked{% endif %}
+                  >
+                </td>
+                <td>
+                  {% if provider.builtin %}
+                  <div class="fw-semibold d-flex align-items-center gap-2">
+                    <span>{{ provider.label }}</span>
+                    <span class="provider-badge">内置</span>
+                  </div>
+                  <div class="small text-muted">{{ provider.id }}</div>
+                  {% else %}
+                  <input
+                    type="text"
+                    class="form-control form-control-sm provider-label-input provider-label"
+                    value="{{ provider.label }}"
+                    placeholder="显示名称"
+                  >
+                  <div class="provider-inline-note">ID：{{ provider.id }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if provider.builtin %}
+                  <span class="provider-badge">{{ '原站解析' if provider.kind == 'origin' else '内置代理' }}</span>
+                  {% else %}
+                  <span class="provider-badge">自定义代理</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    min="1"
+                    class="form-control form-control-sm provider-order"
+                    value="{{ provider.order }}"
+                  >
+                </td>
+                <td>
+                  {% if provider.builtin %}
+                  <div class="small text-muted">{{ provider.description or '暂无说明' }}</div>
+                  {% if provider.template %}
+                  <div class="provider-inline-note text-break">{{ provider.template }}</div>
+                  {% endif %}
+                  {% else %}
+                  <input
+                    type="text"
+                    class="form-control form-control-sm provider-template-input provider-template"
+                    value="{{ provider.template or '' }}"
+                    placeholder="https://example.com/{domain}?size={size}"
+                  >
+                  <textarea
+                    class="form-control form-control-sm mt-2 provider-description-input provider-description"
+                    rows="2"
+                    placeholder="备注说明，可选"
+                  >{{ provider.description or '' }}</textarea>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if provider.builtin %}
+                  <span class="small text-muted">内置项请用禁用代替删除</span>
+                  {% else %}
+                  <button type="button" class="btn btn-sm btn-outline-danger provider-remove">删除</button>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <input type="hidden" name="icon_source_providers_payload" id="iconSourceProvidersPayload">
+        <div class="form-text mt-2">
+          自动模式会按这里的启用状态和优先级解析源图标；单站点也可以覆盖为指定提供方。
+        </div>
+      </div>
+    </div>
+  </form>
+  {#
+  <section class="icon-hero">
+    <div>
+      <div class="icon-hero-badge"><i class="bi bi-stars"></i>图标资产</div>
+      <h2><i class="bi bi-image"></i>图标管理</h2>
+      <p>统一管理图标来源、本地化、图床同步和异常站点处理。保留现有能力，只优化页面层级、密度和移动端体验。</p>
+    </div>
+    <div class="icon-hero-actions">
+      <a href="{{ url_for('admin.websites') }}" class="btn btn-outline-primary">
+        <i class="bi bi-globe"></i>返回站点管理
+      </a>
+      <button type="submit" form="iconManagementForm" class="btn btn-primary">
+        <i class="bi bi-save"></i>保存设置
+      </button>
+    </div>
+  </section>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2><i class="bi bi-image"></i> 图标管理</h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin.websites') }}" class="btn btn-outline-primary">
+      <i class="bi bi-globe"></i> 返回站点管理
+    </a>
+    <button type="submit" form="iconManagementForm" class="btn btn-primary">
+      <i class="bi bi-save"></i> 保存设置
+    </button>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-bar-chart-line"></i> 概览统计</div>
+  <div class="card-body">
+    <div class="icon-summary-grid">
+      <div class="icon-summary-card">
+        <div class="text-muted small">网站总数</div>
+        <div class="value">{{ summary.total_websites }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">源图标可用</div>
+        <div class="value">{{ summary.source_available }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">本地图标可用</div>
+        <div class="value">{{ summary.local_available }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">图床图标可用</div>
+        <div class="value">{{ summary.imagebed_available }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">手动上传</div>
+        <div class="value">{{ summary.manual_upload_count }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">共享资产</div>
+        <div class="value">{{ summary.shared_asset_count }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">显示缺失</div>
+        <div class="value text-danger">{{ summary.display_missing }}</div>
+      </div>
+      <div class="icon-summary-card">
+        <div class="text-muted small">失败项</div>
+        <div class="value text-warning">{{ summary.fetch_failed + summary.local_failed + summary.imagebed_failed }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="post" id="iconManagementForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-sliders"></i> 全局设置</div>
+      <div class="card-body">
+          <div class="icon-section">
+            <h4>常用配置</h4>
+            <p>先决定前台图标优先显示什么，以及新建站点默认如何处理。</p>
+            <div class="icon-grid">
+              <div class="icon-field">
+                <label class="form-label" for="iconDisplayMode">前台图标显示优先级</label>
+                <select class="form-select" id="iconDisplayMode" name="icon_display_mode">
+                  <option value="smart" {% if settings.icon_display_mode == 'smart' %}selected{% endif %}>推荐：优先本地，缺失时自动回退</option>
+                  <option value="source" {% if settings.icon_display_mode == 'source' %}selected{% endif %}>尽量显示网站原图标</option>
+                  <option value="local" {% if settings.icon_display_mode == 'local' %}selected{% endif %}>优先显示本地缓存图标</option>
+                  <option value="imagebed" {% if settings.icon_display_mode == 'imagebed' %}selected{% endif %}>优先显示图床地址</option>
+                </select>
+                <div class="icon-field-note">推荐保持“优先本地，缺失时自动回退”，兼顾加载速度和可用性。</div>
+              </div>
+            </div>
+
+            <div class="icon-toggle-grid">
+              <div class="icon-toggle">
+                <div class="icon-step-label">步骤 1</div>
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" id="autoFetch" name="icon_auto_fetch_on_create" {% if settings.icon_auto_fetch_on_create %}checked{% endif %}>
+                  <label class="form-check-label" for="autoFetch">新建站点后自动获取图标</label>
+                </div>
+                <div class="icon-toggle-note">创建站点后自动尝试解析源图标，减少手工补录。</div>
+              </div>
+
+              <div class="icon-toggle">
+                <div class="icon-step-label">步骤 2</div>
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" id="syncLocal" name="icon_default_sync_local" {% if settings.icon_default_sync_local %}checked{% endif %}>
+                  <label class="form-check-label" for="syncLocal">抓取成功后自动保存到本地</label>
+                </div>
+                <div class="icon-toggle-note">建议开启，便于缓存、复用和更稳定的前台展示。</div>
+              </div>
+
+              <div class="icon-toggle">
+                <div class="icon-step-label">步骤 3</div>
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" id="syncImagebed" name="icon_default_sync_imagebed" {% if settings.icon_default_sync_imagebed %}checked{% endif %}>
+                  <label class="form-check-label" for="syncImagebed">抓取成功后自动上传到图床</label>
+                </div>
+                <div class="icon-toggle-note">仅在已经完成图床接入时建议开启。</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="icon-section">
+            <h4>图床配置</h4>
+            <p>只有在需要图床托管或优先显示图床地址时，才需要配置这里。</p>
+            <div class="icon-grid">
+              <div class="icon-field">
+                <label class="form-label" for="iconImagebedProvider">图床服务</label>
+                <select class="form-select" id="iconImagebedProvider" name="icon_imagebed_provider">
+                  <option value="" {% if not settings.icon_imagebed_provider %}selected{% endif %}>未启用</option>
+                  <option value="easyimage" {% if settings.icon_imagebed_provider == 'easyimage' %}selected{% endif %}>EasyImage</option>
+                </select>
+                <div class="icon-field-note">未启用时，系统不会自动上传到图床，也不建议把显示优先级设为图床。</div>
+              </div>
+
+              <div class="icon-field">
+                <div class="form-label">当前状态</div>
+                <div class="icon-status-row">
+                  <span class="icon-status-chip {% if settings.icon_imagebed_provider %}ready{% else %}off{% endif %}">
+                    服务：{% if settings.icon_imagebed_provider %}已启用{% else %}未启用{% endif %}
+                  </span>
+                  <span class="icon-status-chip {% if has_imagebed_api_url %}ready{% else %}off{% endif %}">
+                    API URL：{% if has_imagebed_api_url %}已保存{% else %}未设置{% endif %}
+                  </span>
+                  <span class="icon-status-chip {% if has_imagebed_token %}ready{% else %}off{% endif %}">
+                    Token：{% if has_imagebed_token %}已保存{% else %}未设置{% endif %}
+                  </span>
+                </div>
+                <div class="icon-field-note">敏感信息不会在页面回显，重新填写时才会更新。</div>
+              </div>
+            </div>
+
+            <div id="imagebedConfigFields" class="{% if not settings.icon_imagebed_provider %}is-hidden{% endif %}">
+              <div class="icon-grid mt-3">
+                <div class="icon-field">
+                  <label class="form-label" for="iconImagebedApiUrl">图床 API URL</label>
+                  <input type="text" class="form-control" id="iconImagebedApiUrl" name="icon_imagebed_api_url" value="" placeholder="留空则保持现有地址，重新输入可更新">
+                  <div class="icon-field-note">填写上传接口地址；留空表示保持原值不变。</div>
+                  <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" value="1" id="clearApiUrl" name="clear_icon_imagebed_api_url">
+                    <label class="form-check-label" for="clearApiUrl">清空已保存的图床 API URL</label>
+                  </div>
+                </div>
+
+                <div class="icon-field">
+                  <label class="form-label" for="iconImagebedToken">图床 Token</label>
+                  <input type="password" class="form-control" id="iconImagebedToken" name="icon_imagebed_token" value="" placeholder="留空则保持现有 Token，重新输入可更新">
+                  <div class="icon-field-note">只在需要更新凭据时重新填写；否则保持为空即可。</div>
+                  <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" value="1" id="clearToken" name="clear_icon_imagebed_token">
+                    <label class="form-check-label" for="clearToken">清空已保存的图床 Token</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="imagebedDisabledNote" class="icon-note mt-3 {% if settings.icon_imagebed_provider %}is-hidden{% endif %}">
+              当前未启用图床。如果你现在只想先完成图标本地化，可以暂时不配置这里；以后启用图床时再补充 API URL 和 Token 即可。
+            </div>
+          </div>
+
+          <div class="icon-section">
+            <h4>高级操作</h4>
+            <p>这些操作会影响已有站点数据，通常只在来源规则或代理策略变更后使用。</p>
+            <div class="icon-note">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="refreshAutoSourceUrls" name="refresh_auto_source_urls">
+                <label class="form-check-label" for="refreshAutoSourceUrls">按当前来源规则重算已有 auto 站点的源地址</label>
+              </div>
+              <div class="icon-field-note">只会刷新 auto 模式站点，不覆盖手动上传或手动 URL。若当前仍优先显示本地或图床，前台展示不会立刻切换。</div>
+            </div>
+          </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center gap-2">
+      <span><i class="bi bi-diagram-3"></i> 来源提供方管理</span>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="addCustomProvider">
+        <i class="bi bi-plus-lg"></i> 添加自定义代理
+      </button>
+    </div>
+    <div class="card-body">
+      <div class="icon-note mb-3">
+        这里管理“系统从哪里取源图标、按什么顺序尝试”，属于来源策略，不影响上面的日常默认配置。
+      </div>
+      <div class="table-responsive provider-table">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>启用</th>
+              <th>名称</th>
+              <th>类型</th>
+              <th>顺序</th>
+              <th>模板 / 说明</th>
+              <th class="text-end">操作</th>
+            </tr>
+          </thead>
+          <tbody id="providerRows">
+            {% for provider in source_providers %}
+            <tr
+              class="provider-row"
+              data-provider-id="{{ provider.id }}"
+              data-provider-builtin="{{ 1 if provider.builtin else 0 }}"
+              data-provider-kind="{{ provider.kind }}"
+            >
+              <td>
+                <input
+                  class="form-check-input provider-enabled"
+                  type="checkbox"
+                  {% if provider.enabled %}checked{% endif %}
+                >
+              </td>
+              <td>
+                {% if provider.builtin %}
+                <div class="fw-semibold d-flex align-items-center gap-2">
+                  <span>{{ provider.label }}</span>
+                  <span class="provider-badge">内置</span>
+                </div>
+                <div class="small text-muted">{{ provider.id }}</div>
+                {% else %}
+                <input
+                  type="text"
+                  class="form-control form-control-sm provider-label-input provider-label"
+                  value="{{ provider.label }}"
+                  placeholder="显示名称"
+                >
+                <div class="provider-inline-note">ID：{{ provider.id }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if provider.builtin %}
+                <span class="provider-badge">{{ '原站解析' if provider.kind == 'origin' else '内置代理' }}</span>
+                {% else %}
+                <span class="provider-badge">自定义代理</span>
+                {% endif %}
+              </td>
+              <td>
+                <input
+                  type="number"
+                  min="1"
+                  class="form-control form-control-sm provider-order"
+                  value="{{ provider.order }}"
+                >
+              </td>
+              <td>
+                {% if provider.builtin %}
+                <div class="small text-muted">{{ provider.description or '无说明' }}</div>
+                {% if provider.template %}
+                <div class="provider-inline-note text-break">{{ provider.template }}</div>
+                {% endif %}
+                {% else %}
+                <input
+                  type="text"
+                  class="form-control form-control-sm provider-template-input provider-template"
+                  value="{{ provider.template or '' }}"
+                  placeholder="https://example.com/{domain}?size={size}"
+                >
+                <textarea
+                  class="form-control form-control-sm mt-2 provider-description-input provider-description"
+                  rows="2"
+                  placeholder="备注说明，可选"
+                >{{ provider.description or '' }}</textarea>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if provider.builtin %}
+                <span class="small text-muted">内置项建议通过禁用代替删除</span>
+                {% else %}
+                <button type="button" class="btn btn-sm btn-outline-danger provider-remove">删除</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <input type="hidden" name="icon_source_providers_payload" id="iconSourceProvidersPayload">
+      <div class="form-text mt-2">
+        自动模式下会按这里的启用状态和顺序解析源图标；单站点也可以覆盖为指定提供方。自定义代理模板必须包含 <code>{domain}</code>，可选使用 <code>{size}</code>。
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="row g-4 mt-1">
+  <div class="col-12">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-lightning"></i> 批量任务</div>
+      <div class="card-body">
+        <div class="task-actions">
+          {% for task_type, label in task_labels.items() %}
+          <button type="button" class="btn btn-outline-primary icon-task-btn" data-task-type="{{ task_type }}">
+            {{ label }}
+          </button>
+          {% endfor %}
+        </div>
+        <div class="icon-note mt-3">
+          这里负责“立刻执行一次”的运维动作，不会改动上面的默认规则设置。
+        </div>
+        <div id="taskPanel" class="task-live">
+          <div class="task-live-top">
+            <div>
+              <div class="task-live-eyebrow">最近任务</div>
+              <div id="taskTitle" class="task-live-title">{{ latest_task.task_type and task_labels.get(latest_task.task_type, latest_task.task_type) or '暂无任务' }}</div>
+            </div>
+            <span id="taskStatusBadge" class="status-badge" data-status="{% if latest_task.id %}{{ latest_task.status }}{% else %}idle{% endif %}">
+              {% if latest_task.id %}{{ latest_task.status }}{% else %}idle{% endif %}
+            </span>
+          </div>
+          <div id="taskStatus" class="task-live-status">
+            {% if latest_task.id %}
+            状态：{{ latest_task.status }}，进度 {{ latest_task.percent }}%
+            {% else %}
+            还没有执行过图标任务
+            {% endif %}
+          </div>
+          <div class="progress icon-progress">
+            <div id="taskProgress" class="progress-bar {% if latest_task.status == 'completed' %}is-success{% elif latest_task.status == 'failed' %}is-failed{% endif %}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ latest_task.percent or 0 }}" style="width: {{ latest_task.percent or 0 }}%"></div>
+          </div>
+          <div class="task-live-meta mt-3" id="taskMeta">
+            {% if latest_task.id %}
+            已处理 {{ latest_task.processed }}/{{ latest_task.total }}，成功 {{ latest_task.success }}，失败 {{ latest_task.failed }}，跳过 {{ latest_task.skipped }}，耗时 {{ latest_task.elapsed_time }}
+            {% endif %}
+          </div>
+          <div class="task-live-error task-error truncate-2" id="taskError" {% if latest_task.error_summary %}title="{{ latest_task.error_summary }}"{% endif %}>
+            {% if latest_task.error_summary %}{{ latest_task.error_summary }}{% endif %}
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+          <div class="fw-semibold"><i class="bi bi-clock-history"></i> 最近任务记录</div>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="clearTaskHistory">一键清空</button>
+        </div>
+        {% if recent_tasks %}
+        <div class="table-responsive task-history-scroll">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>任务</th>
+                <th>状态</th>
+                <th>进度</th>
+                <th>耗时</th>
+                <th class="text-end">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for task in recent_tasks %}
+              <tr>
+                <td class="truncate-1" title="{{ task.label }}">{{ task.label }}</td>
+                <td>
+                  <div>{{ task.status }}</div>
+                  {% if task.error_summary %}
+                  <div class="task-error truncate-2" title="{{ task.error_summary }}">{{ task.error_summary }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ task.processed }}/{{ task.total }}</td>
+                <td>{{ task.elapsed_time }}</td>
+                <td class="text-end">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    data-delete-task-id="{{ task.id }}"
+                    {% if task.is_running %}disabled{% endif %}
+                  >
+                    删除
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-muted">暂无任务记录。</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-exclamation-triangle"></i> 问题站点</div>
+      <div class="card-body">
+        {% if problem_sites %}
+        <div class="problem-site-scroll">
+          {% for item in problem_sites %}
+          <div class="problem-site">
+            <div class="problem-site-main">
+              {% if item.snapshot.url %}
+              <img class="problem-site-icon" src="{{ item.snapshot.url }}" alt="{{ item.website.title }}" loading="lazy" decoding="async">
+              {% else %}
+              <div class="problem-site-fallback">{{ item.website.title[:1] }}</div>
+              {% endif %}
+              <div class="problem-site-text">
+                <div class="problem-site-title" title="{{ item.website.title }}">{{ item.website.title }}</div>
+                <div class="problem-site-url" title="{{ item.website.url }}">{{ item.website.url }}</div>
+                <div class="small text-muted">
+                  来源状态 {{ item.snapshot.fetch_status }} / 本地 {{ item.snapshot.local_status }} / 图床 {{ item.snapshot.imagebed_status }}
+                </div>
+                <div class="small text-muted">
+                  当前源提供方 {{ item.snapshot.source_provider_label or '未命中' }}
+                </div>
+              </div>
+            </div>
+            <div class="problem-site-actions">
+              <button type="button" class="btn btn-sm btn-outline-primary" data-site-action="sync_local" data-website-id="{{ item.website.id }}">本地化</button>
+              <button type="button" class="btn btn-sm btn-outline-warning" data-site-action="sync_imagebed" data-website-id="{{ item.website.id }}">传图床</button>
+              <a href="{{ url_for('admin.edit_website', id=item.website.id) }}" class="btn btn-sm btn-outline-secondary">处理</a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted">最近没有发现明显的图标问题站点。</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+  #}
+</div>
+{% endblock %}
+
+{% block admin_scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    const settingsForm = document.getElementById("iconManagementForm");
+    const taskButtons = document.querySelectorAll("[data-task-type]");
+    const deleteTaskButtons = document.querySelectorAll("[data-delete-task-id]");
+    const clearTaskHistoryBtn = document.getElementById("clearTaskHistory");
+    const siteActionButtons = document.querySelectorAll("[data-site-action]");
+    const providerRows = document.getElementById("providerRows");
+    const addCustomProviderBtn = document.getElementById("addCustomProvider");
+    const providerPayloadInput = document.getElementById("iconSourceProvidersPayload");
+    const imagebedProviderSelect = document.getElementById("iconImagebedProvider");
+    const imagebedConfigFields = document.getElementById("imagebedConfigFields");
+    const imagebedDisabledNote = document.getElementById("imagebedDisabledNote");
+    const taskStatusBadge = document.getElementById("taskStatusBadge");
+    let currentTaskId = {{ latest_task.id or 'null' }};
+    let taskPollTimer = null;
+    let customProviderCounter = 0;
+
+    function createCustomProviderId() {
+      customProviderCounter += 1;
+      return `custom_${Date.now()}_${customProviderCounter}`;
+    }
+
+    function createCustomProviderRow(provider = {}) {
+      const providerId = provider.id || createCustomProviderId();
+      const row = document.createElement("tr");
+      row.className = "provider-row";
+      row.dataset.providerId = providerId;
+      row.dataset.providerBuiltin = "0";
+      row.dataset.providerKind = "proxy";
+      row.innerHTML = `
+        <td>
+          <input class="form-check-input provider-enabled" type="checkbox" ${provider.enabled === false ? "" : "checked"}>
+        </td>
+        <td>
+          <input
+            type="text"
+            class="form-control form-control-sm provider-label-input provider-label"
+            value="${provider.label || ""}"
+            placeholder="显示名称"
+          >
+          <div class="provider-inline-note">ID：${providerId}</div>
+        </td>
+        <td>
+          <span class="provider-badge">自定义代理</span>
+        </td>
+        <td>
+          <input
+            type="number"
+            min="1"
+            class="form-control form-control-sm provider-order"
+            value="${provider.order || 999}"
+          >
+        </td>
+        <td>
+          <input
+            type="text"
+            class="form-control form-control-sm provider-template-input provider-template"
+            value="${provider.template || ""}"
+            placeholder="https://example.com/{domain}?size={size}"
+          >
+          <textarea
+            class="form-control form-control-sm mt-2 provider-description-input provider-description"
+            rows="2"
+            placeholder="备注说明，可选"
+          >${provider.description || ""}</textarea>
+        </td>
+        <td class="text-end">
+          <button type="button" class="btn btn-sm btn-outline-danger provider-remove">删除</button>
+        </td>
+      `;
+      return row;
+    }
+
+    function serializeSourceProviders() {
+      const providers = [];
+      const rows = providerRows ? providerRows.querySelectorAll(".provider-row") : [];
+
+      rows.forEach((row) => {
+        const builtin = row.dataset.providerBuiltin === "1";
+        const providerId = (row.dataset.providerId || "").trim();
+        const enabled = !!row.querySelector(".provider-enabled")?.checked;
+        const orderValue = row.querySelector(".provider-order")?.value;
+        const order = Number.parseInt(orderValue || "999", 10);
+
+        if (!providerId) {
+          return;
+        }
+
+        if (builtin) {
+          providers.push({
+            id: providerId,
+            builtin: true,
+            enabled,
+            order: Number.isFinite(order) ? order : 999,
+          });
+          return;
+        }
+
+        const label = (row.querySelector(".provider-label")?.value || "").trim();
+        const template = (row.querySelector(".provider-template")?.value || "").trim();
+        const description = (row.querySelector(".provider-description")?.value || "").trim();
+
+        if (!label) {
+          throw new Error(`自定义图标源 ${providerId} 缺少名称`);
+        }
+        if (!template) {
+          throw new Error(`自定义图标源“${label}”缺少模板`);
+        }
+        if (!template.includes("{domain}")) {
+          throw new Error(`自定义图标源“${label}”的模板必须包含 {domain}`);
+        }
+        if (!/^https?:\/\//i.test(template)) {
+          throw new Error(`自定义图标源“${label}”的模板必须以 http:// 或 https:// 开头`);
+        }
+
+        providers.push({
+          id: providerId,
+          builtin: false,
+          kind: "proxy",
+          enabled,
+          order: Number.isFinite(order) ? order : 999,
+          label,
+          template,
+          description,
+        });
+      });
+
+      return providers;
+    }
+
+    function updateProviderRowState(row) {
+      if (!row) {
+        return;
+      }
+      row.classList.toggle("disabled", !row.querySelector(".provider-enabled")?.checked);
+    }
+
+    function syncImagebedConfigVisibility() {
+      const enabled = !!(imagebedProviderSelect?.value || "").trim();
+      imagebedConfigFields?.classList.toggle("is-hidden", !enabled);
+      imagebedDisabledNote?.classList.toggle("is-hidden", enabled);
+    }
+
+    function updateTaskBar(status) {
+      const progress = document.getElementById("taskProgress");
+      if (!progress) {
+        return;
+      }
+      progress.classList.remove("is-success", "is-failed");
+      if (status === "completed" || status === "success") {
+        progress.classList.add("is-success");
+      } else if (status === "failed") {
+        progress.classList.add("is-failed");
+      }
+    }
+
+    function clearTaskPoll() {
+      if (taskPollTimer) {
+        clearTimeout(taskPollTimer);
+        taskPollTimer = null;
+      }
+    }
+
+    function scheduleTaskPoll(delay = 2000) {
+      clearTaskPoll();
+      taskPollTimer = window.setTimeout(pollLatestTask, delay);
+    }
+
+    function renderTask(task) {
+      if (!task) {
+        clearTaskPoll();
+        return;
+      }
+      currentTaskId = task.id;
+      document.getElementById("taskTitle").textContent = task.label || task.task_type || "暂无任务";
+      document.getElementById("taskStatus").textContent = `状态：${task.status}，进度 ${task.percent}%`;
+      if (taskStatusBadge) {
+        taskStatusBadge.textContent = task.status || "idle";
+        taskStatusBadge.dataset.status = task.status || "idle";
+      }
+      document.getElementById("taskProgress").style.width = `${task.percent || 0}%`;
+      document.getElementById("taskProgress").setAttribute("aria-valuenow", String(task.percent || 0));
+      document.getElementById("taskMeta").textContent = `已处理 ${task.processed}/${task.total}，成功 ${task.success}，失败 ${task.failed}，跳过 ${task.skipped}，耗时 ${task.elapsed_time}`;
+      document.getElementById("taskError").textContent = task.error_summary || "";
+      if (task.error_summary) {
+        document.getElementById("taskError").setAttribute("title", task.error_summary);
+      } else {
+        document.getElementById("taskError").removeAttribute("title");
+      }
+      updateTaskBar(task.status);
+      if (task.is_running) {
+        scheduleTaskPoll(2000);
+      } else {
+        clearTaskPoll();
+      }
+    }
+
+    function pollLatestTask() {
+      fetch("{{ url_for('admin.api_get_latest_icon_task') }}")
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.success) {
+            renderTask(data.task || null);
+          }
+        })
+        .catch(() => {
+          clearTaskPoll();
+        });
+    }
+
+    taskButtons.forEach((button) => {
+      button.addEventListener("click", function () {
+        const taskType = this.dataset.taskType;
+        fetch("{{ url_for('admin.api_start_icon_task') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken
+          },
+          body: JSON.stringify({ task_type: taskType })
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!data.success) {
+              alert(data.message || "任务启动失败");
+              return;
+            }
+            if (data.started === false && data.message) {
+              alert(data.message);
+            }
+            renderTask(data.task);
+          })
+          .catch(() => {
+            alert("任务启动失败，请稍后重试");
+          });
+      });
+    });
+
+    deleteTaskButtons.forEach((button) => {
+      button.addEventListener("click", function () {
+        const taskId = this.dataset.deleteTaskId;
+        if (!taskId || !confirm("确认删除这条任务记录吗？")) {
+          return;
+        }
+        fetch(`{{ url_for('admin.api_delete_icon_task', task_id=0) }}`.replace("/0/delete", `/${taskId}/delete`), {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": csrfToken
+          }
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!data.success) {
+              alert(data.message || "删除失败");
+              return;
+            }
+            window.location.reload();
+          })
+          .catch(() => {
+            alert("删除任务记录失败，请稍后重试");
+          });
+      });
+    });
+
+    if (clearTaskHistoryBtn) {
+      clearTaskHistoryBtn.addEventListener("click", function () {
+        if (!confirm("确认清空所有非运行中的任务记录吗？")) {
+          return;
+        }
+        fetch("{{ url_for('admin.api_clear_icon_tasks') }}", {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": csrfToken
+          }
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!data.success) {
+              alert(data.message || "清空失败");
+              return;
+            }
+            window.location.reload();
+          })
+          .catch(() => {
+            alert("清空任务记录失败，请稍后重试");
+          });
+      });
+    }
+
+    siteActionButtons.forEach((button) => {
+      button.addEventListener("click", function () {
+        const websiteId = this.dataset.websiteId;
+        const action = this.dataset.siteAction;
+        const actionLabel = this.textContent.trim();
+        if (!websiteId || !action) {
+          return;
+        }
+        this.disabled = true;
+        fetch(`{{ url_for('admin.api_website_icon_action', id=0) }}`.replace("/0/icon-action", `/${websiteId}/icon-action`), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken
+          },
+          body: JSON.stringify({ action })
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!data.success) {
+              alert(data.message || `${actionLabel}失败`);
+              return;
+            }
+            alert(data.message || `${actionLabel}成功`);
+            window.location.reload();
+          })
+          .catch(() => {
+            alert(`${actionLabel}失败，请稍后重试`);
+          })
+          .finally(() => {
+            this.disabled = false;
+          });
+      });
+    });
+
+    if (addCustomProviderBtn && providerRows) {
+      addCustomProviderBtn.addEventListener("click", function () {
+        const row = createCustomProviderRow({
+          order: providerRows.querySelectorAll(".provider-row").length * 10 + 10,
+        });
+        providerRows.appendChild(row);
+        row.querySelector(".provider-label")?.focus();
+      });
+
+      providerRows.addEventListener("click", function (event) {
+        const removeButton = event.target.closest(".provider-remove");
+        if (!removeButton) {
+          return;
+        }
+        const row = removeButton.closest(".provider-row");
+        if (!row) {
+          return;
+        }
+        row.remove();
+      });
+
+      providerRows.addEventListener("change", function (event) {
+        const checkbox = event.target.closest(".provider-enabled");
+        if (!checkbox) {
+          return;
+        }
+        updateProviderRowState(checkbox.closest(".provider-row"));
+      });
+
+      providerRows.querySelectorAll(".provider-row").forEach(updateProviderRowState);
+    }
+
+    if (settingsForm && providerPayloadInput) {
+      settingsForm.addEventListener("submit", function (event) {
+        try {
+          providerPayloadInput.value = JSON.stringify(serializeSourceProviders());
+        } catch (error) {
+          event.preventDefault();
+          alert(error.message || "图标源配置校验失败");
+        }
+      });
+    }
+
+    imagebedProviderSelect?.addEventListener("change", syncImagebedConfigVisibility);
+
+    if ({{ latest_task.is_running | tojson }}) {
+      scheduleTaskPoll(2000);
+    } else {
+      updateTaskBar({{ latest_task.status | tojson }});
+      providerRows?.querySelectorAll(".provider-row").forEach(updateProviderRowState);
+    }
+
+    syncImagebedConfigVisibility();
+  });
+</script>
+{% endblock %}
