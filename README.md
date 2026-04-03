@@ -376,3 +376,7 @@ MIT License - 详见 LICENSE 文件
 ## 👨‍💻 贡献
 
 欢迎提交 Issue 和 Pull Request 来帮助改进项目！
+
+## 社区
+
+[Linux.do](https://linux.do/)
