@@ -67,10 +67,10 @@ def fetch_website_info():
             from app.utils.ai_search import create_ai_service_from_settings
             
             settings = SiteSettings.get_settings()
-            ai_service = create_ai_service_from_settings(settings)
+            ai_service = create_ai_service_from_settings(settings, task='site_info')
             
             if not ai_service:
-                current_app.logger.warning(f"AI服务未配置或未启用，无法生成网站信息: {url}")
+                current_app.logger.warning(f"AI服务未配置，无法生成网站信息: {url}")
                 # 如果AI服务不可用，返回原有结果，但添加提示信息
                 if not result.get("success"):
                     result["message"] = "网站信息获取失败，且AI服务未配置"
@@ -145,12 +145,12 @@ def translate_description():
         from app.utils.ai_search import create_ai_service_from_settings
         
         settings = SiteSettings.get_settings()
-        ai_service = create_ai_service_from_settings(settings)
+        ai_service = create_ai_service_from_settings(settings, task='translate')
         
         if not ai_service:
             return jsonify({
                 "success": False, 
-                "message": "AI服务未配置或未启用，无法使用翻译功能"
+                "message": "AI服务未配置，无法使用翻译功能"
             }), 400
         
         translated = ai_service.translate_text(text, target_lang='zh')

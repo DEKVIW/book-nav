@@ -5,7 +5,7 @@
 import json
 import requests
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from flask import current_app
 
 # AI 搜索提示词模板
@@ -61,194 +61,566 @@ AI_SEARCH_RECOMMEND_PROMPT_TEMPLATE = """你是一个专业的网站导航助手
 只返回JSON，不要其他内容。"""
 
 
+class AIServiceError(Exception):
+    """Base error for AI service failures."""
+
+
+class AICompatibilityError(AIServiceError):
+    """Raised when the provider response shape is incompatible."""
+
+
+class AIEmptyResponseError(AICompatibilityError):
+    """Raised when the provider returns no usable text."""
+
+
+class AIJSONParseError(AICompatibilityError):
+    """Raised when a structured response cannot be parsed as JSON."""
+
+
+AI_TASK_MODEL_FIELDS = {
+    "intent": "ai_selected_intent_model",
+    "rerank": "ai_selected_rerank_model",
+    "translate": "ai_selected_translate_model",
+    "site_info": "ai_selected_site_info_model",
+}
+
+
 class AISearchService:
     """AI 搜索服务类"""
     
-    def __init__(self, api_base_url: str, api_key: str, model_name: str, 
+    def __init__(self, api_base_url: str, api_key: str, model_name: str,
                  temperature: float = 0.7, max_tokens: int = 500):
-        """
-        初始化 AI 搜索服务
-        
-        Args:
-            api_base_url: API 基础 URL
-            api_key: API 密钥
-            model_name: 模型名称
-            temperature: 温度参数（0-1）
-            max_tokens: 最大 token 数
-        """
         self.api_base_url = api_base_url.rstrip('/')
         self.api_key = api_key
         self.model_name = model_name
-        self.temperature = float(temperature) if temperature else 0.7
-        self.max_tokens = max_tokens or 500
-    
-    def _call_api(self, messages: list, temperature: float = None, max_tokens: int = None) -> dict:
-        """
-        调用 AI API
-        
-        Args:
-            messages: 消息列表
-            temperature: 温度参数
-            max_tokens: 最大 token 数
-            
-        Returns:
-            API 响应结果
-        """
+        self.temperature = float(temperature) if temperature is not None else 0.7
+        self.max_tokens = max_tokens if max_tokens is not None else 500
+        self._json_object_response_format_supported: Optional[bool] = None
+
+    def _call_api(self, messages: List[dict], temperature: float = None,
+                  max_tokens: int = None, expect_json: bool = False) -> dict:
+        data = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": self.temperature if temperature is None else temperature,
+            "max_tokens": self.max_tokens if max_tokens is None else max_tokens
+        }
+
+        allow_json_mode_fallback = False
+        if expect_json and self._json_object_response_format_supported is not False:
+            data["response_format"] = {"type": "json_object"}
+            allow_json_mode_fallback = True
+
+        return self._post_chat_completion(
+            data,
+            allow_json_mode_fallback=allow_json_mode_fallback
+        )
+
+    def _post_chat_completion(self, data: Dict[str, Any],
+                              allow_json_mode_fallback: bool = False) -> dict:
         url = f"{self.api_base_url}/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        data = {
-            "model": self.model_name,
-            "messages": messages,
-            "temperature": temperature or self.temperature,
-            "max_tokens": max_tokens or self.max_tokens
-        }
-        
+
         try:
             response = requests.post(url, json=data, headers=headers, timeout=30)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            if data.get("response_format", {}).get("type") == "json_object":
+                self._json_object_response_format_supported = True
+            return payload
+        except requests.exceptions.HTTPError as e:
+            response = e.response
+            if allow_json_mode_fallback and self._should_retry_without_json_mode(response):
+                self._json_object_response_format_supported = False
+                current_app.logger.warning(
+                    "AI provider rejected response_format=json_object; retrying without it"
+                )
+                fallback_data = data.copy()
+                fallback_data.pop("response_format", None)
+                return self._post_chat_completion(
+                    fallback_data,
+                    allow_json_mode_fallback=False
+                )
+            raise Exception(f"AI API 调用失败: {str(e)}")
         except requests.exceptions.Timeout:
             raise Exception("AI API 调用超时，请稍后重试")
         except requests.exceptions.RequestException as e:
             raise Exception(f"AI API 调用失败: {str(e)}")
+        except ValueError as e:
+            raise AICompatibilityError(f"AI API 返回的不是有效 JSON：{str(e)}")
+        except AIServiceError:
+            raise
         except Exception as e:
             raise Exception(f"AI API 处理错误: {str(e)}")
-    
-    def _parse_json_response(self, content: str) -> dict:
-        """
-        解析 AI 返回的 JSON 响应
-        
-        Args:
-            content: AI 返回的内容
-            
-        Returns:
-            解析后的 JSON 字典
-        """
+
+    def _should_retry_without_json_mode(
+        self,
+        response: Optional[requests.Response]
+    ) -> bool:
+        if response is None or response.status_code not in (400, 404, 415, 422):
+            return False
+
+        error_text = (response.text or "").lower()
+        unsupported_markers = [
+            "response_format",
+            "json_object",
+            "json schema",
+            "json_schema",
+            "unsupported",
+            "not support",
+            "unknown field",
+            "invalid parameter",
+            "unrecognized request argument",
+            "extra inputs are not permitted"
+        ]
+        return any(marker in error_text for marker in unsupported_markers)
+
+    def _extract_response_text(self, response: Dict[str, Any]) -> str:
+        if not isinstance(response, dict):
+            raise AICompatibilityError("AI API 返回格式异常，响应不是 JSON 对象")
+
+        issues: List[str] = []
+        choices = response.get("choices")
+        if isinstance(choices, list):
+            for index, choice in enumerate(choices):
+                text, issue = self._extract_choice_text(choice, index)
+                if text:
+                    return text
+                if issue:
+                    issues.append(issue)
+
+        output_text = self._coerce_content_to_text(response.get("output_text"))
+        if output_text:
+            return output_text
+
+        output_text = self._coerce_content_to_text(response.get("output"))
+        if output_text:
+            return output_text
+
+        if issues:
+            raise AIEmptyResponseError("；".join(issues[:3]))
+
+        raise AIEmptyResponseError("AI API 返回成功，但没有可用的文本内容")
+
+    def _extract_choice_text(self, choice: Any, index: int) -> Tuple[str, Optional[str]]:
+        label = f"choices[{index}]"
+        if not isinstance(choice, dict):
+            return "", f"{label} 格式异常"
+
+        message = choice.get("message")
+        if isinstance(message, dict):
+            return self._extract_message_text(message, f"{label}.message")
+
+        text = self._coerce_content_to_text(choice.get("text"))
+        if text:
+            return text, None
+
+        return "", f"{label} 中没有找到可用的文本字段"
+
+    def _extract_message_text(
+        self,
+        message: Dict[str, Any],
+        label: str
+    ) -> Tuple[str, Optional[str]]:
+        text = self._coerce_content_to_text(message.get("content"))
+        if text:
+            return text, None
+
+        text = self._coerce_content_to_text(message.get("text"))
+        if text:
+            return text, None
+
+        if message.get("tool_calls"):
+            return "", f"{label} 返回了 tool_calls，当前功能需要直接文本输出"
+
+        refusal = self._coerce_content_to_text(message.get("refusal"))
+        if refusal:
+            return "", f"{label} 返回了拒绝信息：{self._truncate_text(refusal, 120)}"
+
+        if message.get("content") is None:
+            return "", f"{label}.content 为空"
+
+        return "", f"{label} 中没有可解析的文本内容"
+
+    def _coerce_content_to_text(self, content: Any) -> str:
+        if content is None:
+            return ""
+
+        if isinstance(content, str):
+            return content.strip()
+
+        if isinstance(content, (int, float, bool)):
+            return str(content)
+
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                part = self._coerce_content_to_text(item)
+                if part:
+                    parts.append(part)
+            return "\n".join(parts).strip()
+
+        if isinstance(content, dict):
+            parts = []
+            for key in ("text", "value", "content", "output_text"):
+                if key in content:
+                    part = self._coerce_content_to_text(content.get(key))
+                    if part:
+                        parts.append(part)
+            return "\n".join(parts).strip()
+
+        return ""
+
+    def _parse_json_response(self, content: Any) -> Any:
+        text = self._coerce_content_to_text(content)
+        if not text:
+            raise AIEmptyResponseError("AI 返回了空内容，无法解析 JSON")
+
+        for candidate in self._iter_json_candidates(text):
+            try:
+                parsed = json.loads(candidate)
+                return self._decode_nested_json(parsed)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+
+        raise AIJSONParseError(
+            f"无法解析 AI 响应中的 JSON：{self._truncate_text(text, 200)}"
+        )
+
+    def _iter_json_candidates(self, text: str) -> List[str]:
+        candidates: List[str] = []
+
+        stripped = text.strip()
+        if stripped:
+            candidates.append(stripped)
+
+        for block in re.findall(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE):
+            block = block.strip()
+            if block:
+                candidates.append(block)
+
+        candidates.extend(self._extract_balanced_json_segments(text, "{", "}"))
+        candidates.extend(self._extract_balanced_json_segments(text, "[", "]"))
+
+        deduped: List[str] = []
+        seen = set()
+        for candidate in candidates:
+            if candidate and candidate not in seen:
+                deduped.append(candidate)
+                seen.add(candidate)
+        return deduped
+
+    def _extract_balanced_json_segments(
+        self,
+        text: str,
+        opener: str,
+        closer: str
+    ) -> List[str]:
+        segments = []
+        depth = 0
+        start = None
+        in_string = False
+        escaped = False
+
+        for index, char in enumerate(text):
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+
+            if char == opener:
+                if depth == 0:
+                    start = index
+                depth += 1
+            elif char == closer and depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    segment = text[start:index + 1].strip()
+                    if segment:
+                        segments.append(segment)
+                    start = None
+
+        return segments
+
+    def _decode_nested_json(self, value: Any) -> Any:
+        current = value
+        for _ in range(2):
+            if not isinstance(current, str):
+                break
+            stripped = current.strip()
+            if not stripped:
+                break
+            if stripped[0] not in ('{', '[', '"'):
+                break
+            try:
+                current = json.loads(stripped)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                break
+        return current
+
+    def _normalize_string_list(self, value: Any) -> List[str]:
+        if isinstance(value, list):
+            raw_items = value
+        elif value is None:
+            raw_items = []
+        else:
+            raw_items = re.split(r"[\n,，、]+", self._coerce_content_to_text(value))
+
+        result = []
+        seen = set()
+        for item in raw_items:
+            text = self._coerce_content_to_text(item).strip()
+            if text and text not in seen:
+                result.append(text)
+                seen.add(text)
+        return result
+
+    def _normalize_intent_result(self, payload: Any, user_query: str) -> dict:
+        if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
+            payload = payload[0]
+
+        if isinstance(payload, dict) and isinstance(payload.get("result"), dict):
+            payload = payload["result"]
+
+        if not isinstance(payload, dict):
+            raise AIJSONParseError("AI 意图分析返回的不是 JSON 对象")
+
+        keywords = self._normalize_string_list(payload.get("keywords"))
+        if not keywords and user_query:
+            keywords = [user_query]
+
+        search_type = self._coerce_content_to_text(payload.get("search_type")).lower()
+        if search_type not in {"exact", "fuzzy", "semantic"}:
+            search_type = "semantic" if len(keywords) > 1 else "fuzzy"
+
+        return {
+            "intent": self._coerce_content_to_text(payload.get("intent"))
+            or f"用户想要查找与“{user_query}”相关的网站",
+            "keywords": keywords,
+            "related_terms": self._normalize_string_list(payload.get("related_terms")),
+            "category_hints": self._normalize_string_list(payload.get("category_hints")),
+            "search_type": search_type
+        }
+
+    def _normalize_recommendation_item(self, item: Any) -> Optional[dict]:
+        if not isinstance(item, dict):
+            return None
+
+        website_id = item.get("website_id", item.get("id", item.get("websiteId")))
+        if isinstance(website_id, str):
+            website_id = website_id.strip()
+            if website_id.isdigit():
+                website_id = int(website_id)
+            else:
+                match = re.search(r"\d+", website_id)
+                website_id = int(match.group()) if match else None
+
+        if not isinstance(website_id, int):
+            return None
+
+        score = item.get(
+            "relevance_score",
+            item.get("score", item.get("relevance", item.get("confidence")))
+        )
         try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            # 尝试提取 JSON 部分
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except:
-                    pass
-            raise Exception("无法解析 AI 响应，返回格式不正确")
-    
+            score = float(score) if score is not None else 0.0
+        except (TypeError, ValueError):
+            score = 0.0
+
+        return {
+            "website_id": website_id,
+            "relevance_score": score,
+            "reason": self._coerce_content_to_text(
+                item.get("reason", item.get("explanation", item.get("summary")))
+            )
+        }
+
+    def _normalize_recommendations_result(self, payload: Any) -> dict:
+        summary = ""
+        raw_recommendations = None
+
+        if isinstance(payload, list):
+            raw_recommendations = payload
+        elif isinstance(payload, dict):
+            summary = self._coerce_content_to_text(
+                payload.get("summary", payload.get("message"))
+            )
+            for key in ("recommendations", "results", "items"):
+                candidate = payload.get(key)
+                if isinstance(candidate, list):
+                    raw_recommendations = candidate
+                    break
+
+            if raw_recommendations is None:
+                nested = payload.get("result")
+                if isinstance(nested, dict):
+                    summary = summary or self._coerce_content_to_text(
+                        nested.get("summary", nested.get("message"))
+                    )
+                    for key in ("recommendations", "results", "items"):
+                        candidate = nested.get(key)
+                        if isinstance(candidate, list):
+                            raw_recommendations = candidate
+                            break
+                elif isinstance(nested, list):
+                    raw_recommendations = nested
+
+            if raw_recommendations is None and any(
+                key in payload for key in ("website_id", "id", "websiteId")
+            ):
+                raw_recommendations = [payload]
+        else:
+            raise AIJSONParseError("AI 推荐结果不是可解析的 JSON")
+
+        normalized = []
+        for item in raw_recommendations or []:
+            recommendation = self._normalize_recommendation_item(item)
+            if recommendation:
+                normalized.append(recommendation)
+
+        if raw_recommendations and not normalized:
+            raise AIJSONParseError("AI 返回了推荐数据，但没有可用的 website_id")
+
+        return {
+            "recommendations": normalized,
+            "summary": summary
+        }
+
+    def _normalize_website_info_result(self, payload: Any) -> dict:
+        if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
+            payload = payload[0]
+
+        if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+            payload = payload["data"]
+
+        if not isinstance(payload, dict):
+            raise AIJSONParseError("AI 网站信息返回的不是 JSON 对象")
+
+        title = self._coerce_content_to_text(payload.get("title", payload.get("name")))
+        description = self._coerce_content_to_text(
+            payload.get("description", payload.get("desc", payload.get("summary")))
+        )
+
+        if not title and not description:
+            raise AIJSONParseError("AI 网站信息返回中缺少 title 或 description")
+
+        return {
+            "title": title,
+            "description": description
+        }
+
+    def _cleanup_plain_text(self, text: str) -> str:
+        text = text.strip()
+        fenced_match = re.fullmatch(r"```(?:[\w+-]+)?\s*([\s\S]*?)```", text)
+        if fenced_match:
+            text = fenced_match.group(1).strip()
+        return text
+
+    def _truncate_text(self, text: str, limit: int = 120) -> str:
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "..."
+
     def analyze_search_intent(self, user_query: str) -> dict:
-        """
-        分析用户搜索意图
-        
-        Args:
-            user_query: 用户搜索查询
-            
-        Returns:
-            包含意图、关键词等的字典
-        """
         prompt = AI_SEARCH_PROMPT_TEMPLATE.format(user_query=user_query)
         messages = [
-            {"role": "system", "content": "你是一个专业的网站搜索助手，擅长理解用户搜索意图并提取关键词。"},
+            {
+                "role": "system",
+                "content": "你是专业的网站搜索助手，擅长理解用户搜索意图并提取关键词。"
+            },
             {"role": "user", "content": prompt}
         ]
-        
+
         try:
-            response = self._call_api(messages, max_tokens=300)
-            content = response['choices'][0]['message']['content']
+            response = self._call_api(messages, max_tokens=300, expect_json=True)
+            content = self._extract_response_text(response)
             intent_result = self._parse_json_response(content)
-            return intent_result
+            return self._normalize_intent_result(intent_result, user_query)
         except Exception as e:
             current_app.logger.error(f"AI 意图分析失败: {str(e)}")
             raise
-    
-    def recommend_websites(self, user_query: str, intent: dict, websites: List[dict], 
+
+    def recommend_websites(self, user_query: str, intent: dict, websites: List[dict],
                           vector_scores: Optional[Dict[int, float]] = None,
                           max_recommendations: int = 20) -> dict:
-        """
-        基于 AI 推荐网站（从所有网站中智能推荐）
-        
-        Args:
-            user_query: 用户搜索查询
-            intent: 意图分析结果
-            websites: 所有可用网站列表（字典格式）
-            vector_scores: 向量搜索的相似度分数字典 {website_id: score}
-            max_recommendations: 最大推荐数量
-            
-        Returns:
-            推荐结果
-        """
-        # 为网站添加向量相似度分数（如果提供）
         websites_with_scores = []
-        for w in websites:
-            website_dict = w.copy() if isinstance(w, dict) else {
-                'id': w.id if hasattr(w, 'id') else w.get('id'),
-                'title': w.title if hasattr(w, 'title') else w.get('title', ''),
-                'description': w.description if hasattr(w, 'description') else w.get('description', ''),
-                'category': w.category.name if hasattr(w, 'category') and w.category else w.get('category', ''),
-                'url': w.url if hasattr(w, 'url') else w.get('url', '')
+        for website in websites:
+            website_dict = website.copy() if isinstance(website, dict) else {
+                "id": website.id if hasattr(website, "id") else website.get("id"),
+                "title": website.title if hasattr(website, "title") else website.get("title", ""),
+                "description": website.description if hasattr(website, "description") else website.get("description", ""),
+                "category": website.category.name if hasattr(website, "category") and website.category else website.get("category", ""),
+                "url": website.url if hasattr(website, "url") else website.get("url", "")
             }
-            if vector_scores and website_dict.get('id') in vector_scores:
-                website_dict['vector_score'] = vector_scores[website_dict['id']]
+            if vector_scores and website_dict.get("id") in vector_scores:
+                website_dict["vector_score"] = vector_scores[website_dict["id"]]
             websites_with_scores.append(website_dict)
-        
-        # 限制传给AI的网站数量，避免token过多（但尽量多传一些，让AI有更多选择）
-        # 优先选择有向量分数的网站（向量搜索的结果）
+
         if vector_scores:
-            # 有向量分数的网站优先
-            websites_with_vector = [w for w in websites_with_scores if w.get('vector_score') is not None]
-            websites_without_vector = [w for w in websites_with_scores if w.get('vector_score') is None]
-            # 按向量分数排序
-            websites_with_vector.sort(key=lambda x: x.get('vector_score', 0), reverse=True)
+            websites_with_vector = [
+                website for website in websites_with_scores
+                if website.get("vector_score") is not None
+            ]
+            websites_without_vector = [
+                website for website in websites_with_scores
+                if website.get("vector_score") is None
+            ]
+            websites_with_vector.sort(
+                key=lambda item: item.get("vector_score", 0), reverse=True
+            )
             websites_for_ai = websites_with_vector[:150] + websites_without_vector[:50]
         else:
-            # 没有向量搜索，优先选择有描述的网站
-            websites_with_desc = [w for w in websites_with_scores if w.get('description')]
-            websites_without_desc = [w for w in websites_with_scores if not w.get('description')]
+            websites_with_desc = [
+                website for website in websites_with_scores if website.get("description")
+            ]
+            websites_without_desc = [
+                website for website in websites_with_scores if not website.get("description")
+            ]
             websites_for_ai = (websites_with_desc[:150] + websites_without_desc[:50])[:200]
-        
-        websites_for_ai = websites_for_ai[:200]  # 最多200个
-        
+
+        websites_for_ai = websites_for_ai[:200]
+
         prompt = AI_SEARCH_RECOMMEND_PROMPT_TEMPLATE.format(
             user_query=user_query,
-            intent=intent.get('intent', ''),
+            intent=intent.get("intent", ""),
             total_count=len(websites),
             websites_list=json.dumps(websites_for_ai, ensure_ascii=False, indent=2),
             max_recommendations=max_recommendations
         )
-        
+
         messages = [
-            {"role": "system", "content": "你是一个专业的网站推荐助手，能够准确评估网站与用户查询的相关性。"},
+            {
+                "role": "system",
+                "content": "你是专业的网站推荐助手，能够准确评估网站与用户查询的相关性。"
+            },
             {"role": "user", "content": prompt}
         ]
-        
+
         try:
-            response = self._call_api(messages, max_tokens=2000)  # 增加token数，因为要处理更多网站
-            content = response['choices'][0]['message']['content']
-            return self._parse_json_response(content)
+            response = self._call_api(messages, max_tokens=2000, expect_json=True)
+            content = self._extract_response_text(response)
+            parsed = self._parse_json_response(content)
+            return self._normalize_recommendations_result(parsed)
         except Exception as e:
             current_app.logger.error(f"AI 推荐失败: {str(e)}")
             raise
 
-
     def translate_text(self, text: str, target_lang: str = 'zh') -> str:
-        """
-        翻译文本
-        
-        Args:
-            text: 要翻译的文本
-            target_lang: 目标语言（默认：中文）
-            
-        Returns:
-            翻译后的文本
-        """
         if not text or not text.strip():
             return text
-        
+
         lang_name = "中文" if target_lang == 'zh' else target_lang
-        prompt = f"""请将以下文本翻译为{lang_name}，要求：
+        prompt = f"""请将以下文本翻译成{lang_name}，要求：
 1. 保持原意准确
 2. 语言自然流畅
 3. 只返回翻译结果，不要添加任何解释或说明
@@ -257,66 +629,114 @@ class AISearchService:
 {text}
 
 翻译结果："""
-        
+
         messages = [
-            {"role": "system", "content": "你是一个专业的翻译助手，擅长将各种语言准确翻译为目标语言。"},
+            {
+                "role": "system",
+                "content": "你是专业的翻译助手，擅长将各种语言准确翻译成目标语言。"
+            },
             {"role": "user", "content": prompt}
         ]
-        
+
         try:
             response = self._call_api(messages, temperature=0.3, max_tokens=500)
-            translated = response['choices'][0]['message']['content'].strip()
-            # 清理可能的引号或其他格式
-            translated = translated.strip('"').strip("'").strip()
+            translated = self._extract_response_text(response)
+            translated = self._cleanup_plain_text(translated).strip('"').strip("'").strip()
+            if not translated:
+                raise AIEmptyResponseError("AI 返回了空的翻译结果")
             return translated
         except Exception as e:
             current_app.logger.error(f"AI 翻译失败: {str(e)}")
             raise Exception(f"翻译失败: {str(e)}")
-    
-    def generate_website_info(self, url: str) -> dict:
-        """
-        使用AI根据URL生成网站信息
-        
-        Args:
-            url: 网站URL
-            
-        Returns:
-            包含title和description的字典
-        """
-        prompt = f"""请根据以下网站URL，生成一个简洁准确的网站标题和描述。
 
-网站URL：{url}
+    def generate_website_info(self, url: str) -> dict:
+        prompt = f"""请根据以下网站 URL，生成一个简洁准确的网站标题和描述。
+
+网站 URL：{url}
 
 要求：
-1. 标题：简洁明了，不超过50个字符，准确反映网站的主要功能或内容
-2. 描述：准确描述网站的主要功能、用途和特点，不超过200个字符
+1. 标题：简洁明了，不超过 20 个字符，准确反映网站的主要功能或内容
+2. 描述：准确描述网站的主要功能、用途和特点，不超过 200 个字符
 3. 使用中文
-4. 如果无法确定网站内容，可以根据URL和域名进行合理推测
+4. 如果无法确定网站内容，可以根据 URL 和域名进行合理推测
 
-请以JSON格式返回：
+请以 JSON 格式返回：
 {{
-    "title": "网站标题",
-    "description": "网站描述"
+  "title": "网站标题",
+  "description": "网站描述"
 }}
 
-只返回JSON，不要其他内容。"""
-        
+只返回 JSON，不要输出其他内容。"""
+
         messages = [
-            {"role": "system", "content": "你是一个专业的网站分析助手，能够根据URL准确分析网站的功能和内容。"},
+            {
+                "role": "system",
+                "content": "你是专业的网站分析助手，能够根据 URL 推断网站功能和内容。"
+            },
             {"role": "user", "content": prompt}
         ]
-        
+
         try:
-            response = self._call_api(messages, temperature=0.5, max_tokens=300)
-            content = response['choices'][0]['message']['content']
-            result = self._parse_json_response(content)
-            return result
+            response = self._call_api(
+                messages, temperature=0.5, max_tokens=300, expect_json=True
+            )
+            content = self._extract_response_text(response)
+            parsed = self._parse_json_response(content)
+            return self._normalize_website_info_result(parsed)
         except Exception as e:
             current_app.logger.error(f"AI 生成网站信息失败: {str(e)}")
             raise Exception(f"生成网站信息失败: {str(e)}")
 
 
-def create_ai_service_from_settings(settings) -> Optional[AISearchService]:
+def get_ai_model_for_task(settings, task: Optional[str] = None) -> Optional[str]:
+    auto_enabled = bool(getattr(settings, "ai_auto_model_selection_enabled", False))
+    manual_model = (getattr(settings, "ai_model_name", None) or "").strip()
+
+    if task and auto_enabled:
+        field_name = AI_TASK_MODEL_FIELDS.get(task)
+        if field_name:
+            selected_model = (getattr(settings, field_name, None) or "").strip()
+            if selected_model:
+                return selected_model
+
+        fallback_model = (getattr(settings, "ai_selected_fallback_model", None) or "").strip()
+        if fallback_model:
+            return fallback_model
+
+    if manual_model:
+        return manual_model
+
+    if auto_enabled:
+        for field_name in AI_TASK_MODEL_FIELDS.values():
+            selected_model = (getattr(settings, field_name, None) or "").strip()
+            if selected_model:
+                return selected_model
+
+        fallback_model = (getattr(settings, "ai_selected_fallback_model", None) or "").strip()
+        if fallback_model:
+            return fallback_model
+
+    return None
+
+
+def get_ai_temperature_for_task(settings, task: Optional[str] = None) -> float:
+    try:
+        temperature = float(getattr(settings, "ai_temperature", 0.7) or 0.7)
+    except (TypeError, ValueError):
+        temperature = 0.7
+
+    # 结构化任务更适合低温度输出，减少多余文本与格式漂移。
+    if task in {"intent", "rerank"}:
+        return min(temperature, 0.2)
+
+    return temperature
+
+
+def create_ai_service_from_settings(
+    settings,
+    require_enabled: bool = False,
+    task: Optional[str] = None
+) -> Optional[AISearchService]:
     """
     从站点设置创建 AI 搜索服务
     
@@ -326,18 +746,20 @@ def create_ai_service_from_settings(settings) -> Optional[AISearchService]:
     Returns:
         AISearchService 实例，如果配置不完整则返回 None
     """
-    if not settings.ai_search_enabled:
+    if require_enabled and not settings.ai_search_enabled:
         return None
     
-    if not all([settings.ai_api_base_url, settings.ai_api_key, settings.ai_model_name]):
+    model_name = get_ai_model_for_task(settings, task=task)
+
+    if not all([settings.ai_api_base_url, settings.ai_api_key, model_name]):
         return None
     
     try:
         return AISearchService(
             api_base_url=settings.ai_api_base_url,
             api_key=settings.ai_api_key,
-            model_name=settings.ai_model_name,
-            temperature=settings.ai_temperature,
+            model_name=model_name,
+            temperature=get_ai_temperature_for_task(settings, task=task),
             max_tokens=settings.ai_max_tokens
         )
     except Exception as e:

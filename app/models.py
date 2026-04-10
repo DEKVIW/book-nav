@@ -342,6 +342,16 @@ class SiteSettings(db.Model):
     ai_model_name = db.Column(db.String(128), nullable=True)  # AI模型名称
     ai_temperature = db.Column(db.Float, default=0.7)  # AI温度参数
     ai_max_tokens = db.Column(db.Integer, default=500)  # AI最大token数
+    ai_auto_model_selection_enabled = db.Column(db.Boolean, default=True)  # 是否自动按任务选择模型
+    ai_model_catalog_json = db.Column(db.Text, nullable=True)  # 最近一次模型探测结果
+    ai_selected_intent_model = db.Column(db.String(128), nullable=True)  # 搜索意图分析模型
+    ai_selected_rerank_model = db.Column(db.String(128), nullable=True)  # 搜索推荐/排序模型
+    ai_selected_translate_model = db.Column(db.String(128), nullable=True)  # 翻译模型
+    ai_selected_site_info_model = db.Column(db.String(128), nullable=True)  # 网站信息补全模型
+    ai_selected_fallback_model = db.Column(db.String(128), nullable=True)  # 备用模型
+    ai_model_probe_last_at = db.Column(db.DateTime, nullable=True)  # 最近一次模型探测时间
+    ai_model_probe_error = db.Column(db.Text, nullable=True)  # 最近一次模型探测错误
+    ai_model_probe_signature = db.Column(db.String(64), nullable=True)  # 模型探测签名
     
     # 向量搜索设置（基于 Qdrant）
     vector_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用向量搜索
@@ -473,6 +483,33 @@ class SiteSettings(db.Model):
 
     def set_icon_source_providers(self, providers):
         self.icon_source_providers_json = json.dumps(providers or [], ensure_ascii=False)
+
+    def get_ai_model_catalog(self):
+        if not self.ai_model_catalog_json:
+            return []
+
+        try:
+            payload = json.loads(self.ai_model_catalog_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict) and isinstance(payload.get('models'), list):
+            return payload['models']
+        return []
+
+    def set_ai_model_catalog(self, models):
+        self.ai_model_catalog_json = json.dumps(models or [], ensure_ascii=False)
+
+    def get_ai_selected_models(self):
+        return {
+            'intent': self.ai_selected_intent_model,
+            'rerank': self.ai_selected_rerank_model,
+            'translate': self.ai_selected_translate_model,
+            'site_info': self.ai_selected_site_info_model,
+            'fallback': self.ai_selected_fallback_model,
+        }
     
     def __repr__(self):
         return f'<SiteSettings {self.site_name}>'

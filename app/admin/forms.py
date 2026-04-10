@@ -197,7 +197,7 @@ class SiteSettingsForm(FlaskForm):
     ai_search_allow_anonymous = BooleanField('允许非登录用户使用AI搜索')
     ai_api_base_url = StringField('API基础URL', validators=[Optional(), URL(), Length(max=512)], description='例如: https://api.openai.com')
     ai_api_key = PasswordField('API密钥', validators=[Optional(), Length(max=256)], description='留空则不修改现有密钥')
-    ai_model_name = StringField('模型名称', validators=[Optional(), Length(max=128)], default='gpt-3.5-turbo', description='例如: gpt-3.5-turbo, gpt-4, claude-3-sonnet')
+    ai_model_name = StringField('手动默认模型', validators=[Optional(), Length(max=128)], default='', description='可选。留空时系统可根据探测结果自动选择更适合当前项目的模型')
     ai_temperature = StringField('温度参数', validators=[Optional()], default='0.7', description='0-1之间，控制随机性，默认0.7')
     ai_max_tokens = IntegerField('最大Token数', validators=[Optional(), NumberRange(min=100, max=2000)], default=500)
     

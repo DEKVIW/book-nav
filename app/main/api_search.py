@@ -60,16 +60,20 @@ def api_search():
     
     if use_ai and settings.ai_search_enabled:
         try:
-            from app.utils.ai_search import AISearchService
-            
-            if all([settings.ai_api_base_url, settings.ai_api_key, settings.ai_model_name]):
-                ai_service = AISearchService(
-                    api_base_url=settings.ai_api_base_url,
-                    api_key=settings.ai_api_key,
-                    model_name=settings.ai_model_name,
-                    temperature=settings.ai_temperature,
-                    max_tokens=settings.ai_max_tokens
-                )
+            from app.utils.ai_search import create_ai_service_from_settings
+
+            rerank_ai_service = create_ai_service_from_settings(
+                settings,
+                require_enabled=True,
+                task='rerank'
+            )
+            intent_ai_service = create_ai_service_from_settings(
+                settings,
+                require_enabled=True,
+                task='intent'
+            )
+
+            if rerank_ai_service:
                 
                 needs_ai_intent = (
                     len(query) > 5 or
@@ -130,10 +134,10 @@ def api_search():
                 
                 def do_ai_intent():
                     """AI意图理解任务（仅在需要时执行）"""
-                    if not needs_ai_intent:
+                    if not needs_ai_intent or not intent_ai_service:
                         return None
                     try:
-                        result = ai_service.analyze_search_intent(query)
+                        result = intent_ai_service.analyze_search_intent(query)
                         return result
                     except Exception as e:
                         current_app.logger.warning(f"AI意图理解失败: {str(e)}")
@@ -201,7 +205,7 @@ def api_search():
                         'category_hints': []
                     }
                 
-                recommendations = ai_service.recommend_websites(
+                recommendations = rerank_ai_service.recommend_websites(
                     query, 
                     intent, 
                     websites_for_ai,
@@ -492,7 +496,7 @@ def _progressive_search(query: str, user_id: Optional[int]):
                     }
                     yield f"data: {json_module.dumps(enhanced_error_data, ensure_ascii=False)}\n\n"
             
-            if settings.ai_search_enabled and all([settings.ai_api_base_url, settings.ai_api_key, settings.ai_model_name]):
+            if settings.ai_search_enabled and all([settings.ai_api_base_url, settings.ai_api_key]):
                 if len(websites_data) > 0:
                     needs_ai_intent = (
                         len(query) > 5 or 
@@ -500,15 +504,21 @@ def _progressive_search(query: str, user_id: Optional[int]):
                         ' ' in query
                     )
                     try:
-                        from app.utils.ai_search import AISearchService
-                        
-                        ai_service = AISearchService(
-                            api_base_url=settings.ai_api_base_url,
-                            api_key=settings.ai_api_key,
-                            model_name=settings.ai_model_name,
-                            temperature=settings.ai_temperature,
-                            max_tokens=settings.ai_max_tokens
+                        from app.utils.ai_search import create_ai_service_from_settings
+
+                        rerank_ai_service = create_ai_service_from_settings(
+                            settings,
+                            require_enabled=True,
+                            task='rerank'
                         )
+                        intent_ai_service = create_ai_service_from_settings(
+                            settings,
+                            require_enabled=True,
+                            task='intent'
+                        )
+
+                        if not rerank_ai_service:
+                            raise ValueError('未找到可用于 AI 排序的模型')
                         
                         websites_for_ai = []
                         website_id_map = {}
@@ -523,8 +533,8 @@ def _progressive_search(query: str, user_id: Optional[int]):
                             })
                             website_id_map[site_data['id']] = site_data
                         
-                        if needs_ai_intent:
-                            intent = ai_service.analyze_search_intent(query)
+                        if needs_ai_intent and intent_ai_service:
+                            intent = intent_ai_service.analyze_search_intent(query)
                         else:
                             intent = {
                                 'intent': f"用户想要查找与'{query}'相关的网站",
@@ -533,7 +543,7 @@ def _progressive_search(query: str, user_id: Optional[int]):
                                 'category_hints': []
                             }
                         
-                        recommendations = ai_service.recommend_websites(
+                        recommendations = rerank_ai_service.recommend_websites(
                             query,
                             intent,
                             websites_for_ai,

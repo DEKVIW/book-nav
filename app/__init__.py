@@ -84,6 +84,16 @@ def create_app(config_class=Config):
                 'ai_model_name': None,
                 'ai_temperature': 0.7,
                 'ai_max_tokens': 500,
+                'ai_auto_model_selection_enabled': True,
+                'ai_model_catalog_json': None,
+                'ai_selected_intent_model': None,
+                'ai_selected_rerank_model': None,
+                'ai_selected_translate_model': None,
+                'ai_selected_site_info_model': None,
+                'ai_selected_fallback_model': None,
+                'ai_model_probe_last_at': None,
+                'ai_model_probe_error': None,
+                'ai_model_probe_signature': None,
                 # 向量搜索配置默认值
                 'embedding_api_base_url': None,
                 'embedding_api_key': None

@@ -587,8 +587,53 @@
                 <!-- 左列：AI搜索API配置 -->
                 <div class="col-md-6">
                   <h6 class="mb-3">
-                    <i class="bi bi-robot me-2"></i>AI搜索API配置
+                    <i class="bi bi-robot me-2"></i>AI搜索配置
                   </h6>
+
+                  <textarea class="d-none" id="ai_model_catalog_json" name="ai_model_catalog_json">{{ settings.ai_model_catalog_json or '' }}</textarea>
+                  <textarea class="d-none" id="ai_model_probe_error" name="ai_model_probe_error">{{ ai_probe_state.probe_error or '' }}</textarea>
+                  <input
+                    type="hidden"
+                    id="ai_selected_intent_model"
+                    name="ai_selected_intent_model"
+                    value="{{ ai_probe_state.selected_models.intent or '' }}"
+                  />
+                  <input
+                    type="hidden"
+                    id="ai_selected_rerank_model"
+                    name="ai_selected_rerank_model"
+                    value="{{ ai_probe_state.selected_models.rerank or '' }}"
+                  />
+                  <input
+                    type="hidden"
+                    id="ai_selected_translate_model"
+                    name="ai_selected_translate_model"
+                    value="{{ ai_probe_state.selected_models.translate or '' }}"
+                  />
+                  <input
+                    type="hidden"
+                    id="ai_selected_site_info_model"
+                    name="ai_selected_site_info_model"
+                    value="{{ ai_probe_state.selected_models.site_info or '' }}"
+                  />
+                  <input
+                    type="hidden"
+                    id="ai_selected_fallback_model"
+                    name="ai_selected_fallback_model"
+                    value="{{ ai_probe_state.selected_models.fallback or '' }}"
+                  />
+                  <input
+                    type="hidden"
+                    id="ai_model_probe_last_at"
+                    name="ai_model_probe_last_at"
+                    value="{{ ai_probe_state.probe_last_at or '' }}"
+                  />
+                  <input
+                    type="hidden"
+                    id="ai_model_probe_signature"
+                    name="ai_model_probe_signature"
+                    value="{{ ai_probe_state.probe_signature or '' }}"
+                  />
 
                   <!-- 启用开关（两列布局） -->
                   <div class="row mb-3">
@@ -632,7 +677,6 @@
                     </div>
                   </div>
 
-                  <!-- API基础URL -->
                   <div class="mb-3">
                     <label class="form-label fw-bold">API基础URL</label>
                     {{ form.ai_api_base_url(class="form-control",
@@ -646,7 +690,6 @@
                     </div>
                   </div>
 
-                  <!-- API密钥 -->
                   <div class="mb-3">
                     <label class="form-label fw-bold">API密钥</label>
                     <input
@@ -671,79 +714,167 @@
                     </div>
                   </div>
 
-                  <!-- 模型名称 -->
-                  <div class="mb-3">
-                    <label class="form-label fw-bold">模型名称</label>
-                    {{ form.ai_model_name(class="form-control",
-                    placeholder="gpt-3.5-turbo") }} {% if
-                    form.ai_model_name.errors %} {% for error in
-                    form.ai_model_name.errors %}
-                    <div class="text-danger">{{ error }}</div>
-                    {% endfor %} {% endif %}
-                    <div class="form-text">
-                      例如: gpt-3.5-turbo, gpt-4, claude-3-sonnet
+                  <div class="card shadow-sm border-0 ai-auto-model-card mb-3">
+                    <div class="card-body p-3">
+                      <div
+                        class="d-flex flex-wrap justify-content-between align-items-start gap-2"
+                      >
+                        <label class="form-label fw-bold mb-0"
+                          >自动模型选型</label
+                        >
+                        <div class="form-check form-switch ai-header-switch">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="ai_auto_model_selection_enabled"
+                            name="ai_auto_model_selection_enabled"
+                            value="1"
+                            {% if ai_probe_state.auto_enabled %}checked{% endif %}
+                          />
+                          <label
+                            class="form-check-label"
+                            for="ai_auto_model_selection_enabled"
+                          >
+                            {% if ai_probe_state.auto_enabled %}自动{% else %}手动{% endif %}
+                          </label>
+                        </div>
+                      </div>
+
+                      <div class="d-flex flex-wrap gap-2 my-3">
+                        <button
+                          type="button"
+                          id="detectAiModels"
+                          class="btn btn-primary btn-sm"
+                        >
+                          <i class="bi bi-stars me-2"></i>检测并推荐模型
+                        </button>
+                        <button
+                          type="button"
+                          id="testAiConfig"
+                          class="btn btn-outline-primary btn-sm"
+                        >
+                          <i class="bi bi-play-circle me-2"></i>测试当前模型
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiAdvancedSettingsModal"
+                        >
+                          <i class="bi bi-sliders me-2"></i>高级设置
+                        </button>
+                      </div>
+
+                      <div id="aiProbeSummary" class="ai-probe-summary mb-3"></div>
+                      <div
+                        id="testResult"
+                        class="mb-3"
+                        style="display: none"
+                      ></div>
+
+                      <div id="aiTaskModelGrid" class="row g-2"></div>
+
+                      <div
+                        class="d-flex justify-content-between align-items-center mt-3"
+                      >
+                        <span class="text-muted small"
+                          >当前任务模型与兼容性概览</span
+                        >
+                        <button
+                          type="button"
+                          class="btn btn-link btn-sm p-0 text-decoration-none"
+                          data-bs-toggle="collapse"
+                          data-bs-target="#aiProbeDetailsCollapse"
+                          aria-expanded="false"
+                          aria-controls="aiProbeDetailsCollapse"
+                        >
+                          查看检测详情
+                        </button>
+                      </div>
+
+                      <div class="collapse mt-2" id="aiProbeDetailsCollapse">
+                        <div id="aiProbeDetails" class="ai-probe-details"></div>
+                      </div>
                     </div>
                   </div>
 
-                  <!-- 温度参数和最大Token数 -->
-                  <div class="row mb-3">
-                    <div class="col-6">
-                      <label class="form-label fw-bold">温度参数</label>
-                      {{ form.ai_temperature(class="form-control",
-                      placeholder="0.7", type="number", step="0.1", min="0",
-                      max="1") }} {% if form.ai_temperature.errors %} {% for
-                      error in form.ai_temperature.errors %}
-                      <div class="text-danger">{{ error }}</div>
-                      {% endfor %} {% endif %}
-                      <div class="form-text small">0-1之间，默认0.7</div>
+                  <div
+                    class="modal fade"
+                    id="aiAdvancedSettingsModal"
+                    tabindex="-1"
+                    aria-labelledby="aiAdvancedSettingsModalLabel"
+                    aria-hidden="true"
+                  >
+                    <div class="modal-dialog modal-dialog-centered">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5
+                            class="modal-title"
+                            id="aiAdvancedSettingsModalLabel"
+                          >
+                            AI 高级设置
+                          </h5>
+                          <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                          ></button>
+                        </div>
+                        <div class="modal-body">
+                          <div class="row g-3">
+                            <div class="col-12">
+                              <label class="form-label fw-bold"
+                                >手动默认模型</label
+                              >
+                              {{ form.ai_model_name(class="form-control",
+                              placeholder="可留空，由系统自动选择") }} {% if
+                              form.ai_model_name.errors %} {% for error in
+                              form.ai_model_name.errors %}
+                              <div class="text-danger">{{ error }}</div>
+                              {% endfor %} {% endif %}
+                              <div class="form-text">
+                                仅在你想强制指定单一模型时填写。未填写时，系统会优先使用自动探测结果。
+                              </div>
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label fw-bold">温度参数</label>
+                              {{ form.ai_temperature(class="form-control",
+                              placeholder="0.7", type="number", step="0.1", min="0",
+                              max="1") }} {% if form.ai_temperature.errors %} {%
+                              for error in form.ai_temperature.errors %}
+                              <div class="text-danger">{{ error }}</div>
+                              {% endfor %} {% endif %}
+                              <div class="form-text small">
+                                结构化任务会自动压低温度，减少 JSON 漂移。
+                              </div>
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label fw-bold">最大Token数</label>
+                              {{ form.ai_max_tokens(class="form-control",
+                              type="number", min="100", max="2000") }} {% if
+                              form.ai_max_tokens.errors %} {% for error in
+                              form.ai_max_tokens.errors %}
+                              <div class="text-danger">{{ error }}</div>
+                              {% endfor %} {% endif %}
+                              <div class="form-text small">建议 500-1000</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="modal-footer">
+                          <span class="text-muted small me-auto"
+                            >修改后保存设置即可生效。</span
+                          >
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-bs-dismiss="modal"
+                          >
+                            完成
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div class="col-6">
-                      <label class="form-label fw-bold">最大Token数</label>
-                      {{ form.ai_max_tokens(class="form-control", type="number",
-                      min="100", max="2000") }} {% if form.ai_max_tokens.errors
-                      %} {% for error in form.ai_max_tokens.errors %}
-                      <div class="text-danger">{{ error }}</div>
-                      {% endfor %} {% endif %}
-                      <div class="form-text small">建议500-1000</div>
-                    </div>
-                  </div>
-
-                  <!-- 配置状态提示 -->
-                  {% if settings.ai_api_base_url and settings.ai_api_key and
-                  settings.ai_model_name %}
-                  <div class="alert alert-success mb-3">
-                    <i class="bi bi-check-circle me-2"></i>
-                    <strong>AI搜索已配置</strong>
-                    <p class="mb-0 mt-2 small">
-                      API密钥: {% if settings.ai_api_key|length > 8 %} {{
-                      settings.ai_api_key[:4] }}****{{ settings.ai_api_key[-4:]
-                      }} {% else %} **** {% endif %}
-                    </p>
-                  </div>
-                  {% else %}
-                  <div class="alert alert-warning mb-3">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>AI搜索未完整配置</strong>
-                    <p class="mb-0 mt-2 small">
-                      请填写API基础URL、API密钥和模型名称
-                    </p>
-                  </div>
-                  {% endif %}
-
-                  <!-- 测试按钮 -->
-                  <div class="mb-3">
-                    <button
-                      type="button"
-                      id="testAiConfig"
-                      class="btn btn-outline-primary btn-sm"
-                    >
-                      <i class="bi bi-play-circle me-2"></i>测试AI配置
-                    </button>
-                    <div
-                      id="testResult"
-                      class="mt-2"
-                      style="display: none"
-                    ></div>
                   </div>
                 </div>
 
@@ -1503,37 +1634,438 @@
       syncPcPreview();
     }
 
-    // AI配置测试
+    const aiTaskMeta = {
+      intent: {
+        label: "搜索意图",
+        description: "理解查询并提取关键词",
+      },
+      rerank: {
+        label: "搜索排序",
+        description: "推荐结果、排序与总结",
+      },
+      translate: {
+        label: "描述翻译",
+        description: "将描述稳定翻译成中文",
+      },
+      site_info: {
+        label: "网站补全",
+        description: "生成标题与描述候选",
+      },
+    };
+
+    const detectAiModelsBtn = document.getElementById("detectAiModels");
     const testAiConfigBtn = document.getElementById("testAiConfig");
     const testResultDiv = document.getElementById("testResult");
+    const aiProbeSummary = document.getElementById("aiProbeSummary");
+    const aiTaskModelGrid = document.getElementById("aiTaskModelGrid");
+    const aiProbeDetails = document.getElementById("aiProbeDetails");
+    const aiAutoSwitch = document.getElementById(
+      "ai_auto_model_selection_enabled"
+    );
+    const aiAutoSwitchLabel = aiAutoSwitch
+      ? document.querySelector('label[for="ai_auto_model_selection_enabled"]')
+      : null;
+    const aiManualModelInput = document.getElementById("ai_model_name");
+    const aiModelCatalogField = document.getElementById("ai_model_catalog_json");
+    const aiProbeErrorField = document.getElementById("ai_model_probe_error");
+    const aiProbeLastAtField = document.getElementById("ai_model_probe_last_at");
+    const aiProbeSignatureField = document.getElementById(
+      "ai_model_probe_signature"
+    );
+    const aiSelectedFields = {
+      intent: document.getElementById("ai_selected_intent_model"),
+      rerank: document.getElementById("ai_selected_rerank_model"),
+      translate: document.getElementById("ai_selected_translate_model"),
+      site_info: document.getElementById("ai_selected_site_info_model"),
+      fallback: document.getElementById("ai_selected_fallback_model"),
+    };
+
+    let currentAiProbeState = {{ ai_probe_state | tojson }};
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function syncAiAutoSwitchLabel() {
+      if (!aiAutoSwitchLabel || !aiAutoSwitch) {
+        return;
+      }
+      aiAutoSwitchLabel.textContent = aiAutoSwitch.checked ? "自动" : "手动";
+    }
+
+    function computeEffectiveAiModels(state) {
+      const selectedModels = state.selected_models || {};
+      const manualModel = (state.manual_model_name || "").trim();
+      const autoEnabled = !!state.auto_enabled;
+      const effectiveModels = {};
+
+      Object.keys(aiTaskMeta).forEach((taskKey) => {
+        const taskModel = (selectedModels[taskKey] || "").trim();
+        const fallbackModel = (selectedModels.fallback || "").trim();
+        effectiveModels[taskKey] = autoEnabled
+          ? taskModel || fallbackModel || manualModel || ""
+          : manualModel || "";
+      });
+
+      return effectiveModels;
+    }
+
+    function getAiTaskSource(taskKey, state, effectiveModels) {
+      const selectedModels = state.selected_models || {};
+      const manualModel = (state.manual_model_name || "").trim();
+      const effectiveModel = (effectiveModels[taskKey] || "").trim();
+
+      if (!effectiveModel) {
+        return { label: "未分配", badge: "text-bg-secondary" };
+      }
+      if (!state.auto_enabled) {
+        return { label: "手动默认", badge: "text-bg-dark" };
+      }
+      if ((selectedModels[taskKey] || "").trim()) {
+        return { label: "自动推荐", badge: "text-bg-primary" };
+      }
+      if (
+        (selectedModels.fallback || "").trim() &&
+        effectiveModel === (selectedModels.fallback || "").trim()
+      ) {
+        return { label: "自动回退", badge: "text-bg-warning" };
+      }
+      if (manualModel && effectiveModel === manualModel) {
+        return { label: "手动默认", badge: "text-bg-secondary" };
+      }
+      return { label: "当前生效", badge: "text-bg-secondary" };
+    }
+
+    function syncAiProbeFields(state) {
+      if (!state) {
+        return;
+      }
+
+      const selectedModels = state.selected_models || {};
+      if (aiModelCatalogField) {
+        aiModelCatalogField.value = JSON.stringify(state.catalog || []);
+      }
+      if (aiProbeErrorField) {
+        aiProbeErrorField.value = state.probe_error || "";
+      }
+      if (aiProbeLastAtField) {
+        aiProbeLastAtField.value = state.probe_last_at || "";
+      }
+      if (aiProbeSignatureField) {
+        aiProbeSignatureField.value = state.probe_signature || "";
+      }
+
+      Object.entries(aiSelectedFields).forEach(([key, field]) => {
+        if (field) {
+          field.value = selectedModels[key] || "";
+        }
+      });
+    }
+
+    function renderAiProbeSummary(state) {
+      if (!aiProbeSummary) {
+        return;
+      }
+
+      const stats = state.stats || {};
+      const chips = [];
+
+        if (stats.total_models) {
+          chips.push(
+            `<span class="ai-inline-chip">已发现 ${stats.total_models} 个模型</span>`
+          );
+          chips.push(
+            `<span class="ai-inline-chip">适配 ${stats.compatible_models || 0} 个</span>`
+          );
+          if (stats.partial_models) {
+            chips.push(
+              `<span class="ai-inline-chip">部分兼容 ${stats.partial_models}</span>`
+            );
+          }
+        } else {
+          chips.push(
+            '<span class="ai-inline-chip">尚未检测模型</span>'
+          );
+        }
+
+        if (state.probe_last_at) {
+          chips.push(
+            `<span class="ai-inline-chip">最近检测 ${escapeHtml(
+              state.probe_last_at.replace("T", " ").slice(0, 16)
+            )}</span>`
+          );
+      }
+
+      if (state.probe_stale) {
+        chips.push(
+          '<span class="badge text-bg-warning">结果已过期，请重新检测</span>'
+        );
+      }
+
+      aiProbeSummary.innerHTML = `
+        <div class="d-flex flex-wrap gap-2">${chips.join("")}</div>
+        ${
+          state.probe_error
+            ? `<div class="small text-danger mt-2">${escapeHtml(
+                state.probe_error
+              )}</div>`
+            : ""
+        }
+      `;
+    }
+
+    function renderAiTaskCards(state) {
+      if (!aiTaskModelGrid) {
+        return;
+      }
+
+      const effectiveModels = computeEffectiveAiModels(state);
+      const hasEffectiveModels = Object.values(effectiveModels).some(
+        (value) => (value || "").trim()
+      );
+
+      if (!hasEffectiveModels) {
+        aiTaskModelGrid.innerHTML = `
+          <div class="col-12">
+            <div class="ai-task-model-empty">
+              <div class="fw-semibold mb-1">尚未生成任务模型方案</div>
+              <div class="small text-muted">
+                点击“检测并推荐模型”后，这里会显示搜索意图、搜索排序、描述翻译和网站补全分别使用的模型。
+              </div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      aiTaskModelGrid.innerHTML = Object.entries(aiTaskMeta)
+        .map(([taskKey, meta]) => {
+          const modelName = effectiveModels[taskKey];
+          const source = getAiTaskSource(taskKey, state, effectiveModels);
+          return `
+            <div class="col-6">
+              <div class="ai-task-model-card">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="ai-task-model-label">${meta.label}</div>
+                    <div class="ai-task-model-description">${meta.description}</div>
+                  </div>
+                  <span class="badge ${source.badge}">${source.label}</span>
+                </div>
+                <div class="ai-task-model-name ${
+                  modelName ? "" : "text-muted"
+                }">${escapeHtml(modelName || "未分配")}</div>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function renderAiProbeDetails(state) {
+      if (!aiProbeDetails) {
+        return;
+      }
+
+      const catalog = Array.isArray(state.catalog) ? state.catalog : [];
+      if (!catalog.length) {
+        aiProbeDetails.innerHTML =
+          '<div class="small text-muted py-2">尚未执行模型检测。点击“检测并推荐模型”后，这里会展示各模型的兼容性详情。</div>';
+        return;
+      }
+
+      const statusLabelMap = {
+        good: ["适合当前项目", "text-bg-success"],
+        partial: ["部分兼容", "text-bg-warning"],
+        bad: ["不推荐", "text-bg-danger"],
+        skipped: ["已跳过", "text-bg-secondary"],
+      };
+
+      aiProbeDetails.innerHTML = `
+        <div class="ai-probe-list">
+          ${catalog
+            .map((item) => {
+              const [statusText, statusClass] =
+                statusLabelMap[item.project_fit] || statusLabelMap.skipped;
+              const capabilityChips = [];
+              if (item.supports_text) {
+                capabilityChips.push(
+                  '<span class="ai-inline-chip">文本输出</span>'
+                );
+              }
+              if (item.supports_json) {
+                capabilityChips.push(
+                  '<span class="ai-inline-chip">JSON 输出</span>'
+                );
+              }
+              if (item.supports_json_mode) {
+                capabilityChips.push(
+                  '<span class="ai-inline-chip">JSON Mode</span>'
+                );
+              }
+              if (item.latency_ms) {
+                capabilityChips.push(
+                  `<span class="ai-inline-chip">${item.latency_ms} ms</span>`
+                );
+              }
+
+              const issueText =
+                item.skip_reason ||
+                item.json_error ||
+                item.text_error ||
+                item.text_preview ||
+                item.json_preview ||
+                "";
+
+              return `
+                <div class="ai-probe-item">
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="fw-semibold">${escapeHtml(item.id || "")}</div>
+                      <div class="small text-muted">${escapeHtml(
+                        item.owned_by || "未知提供方"
+                      )}</div>
+                    </div>
+                    <span class="badge ${statusClass}">${statusText}</span>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2 mt-2">
+                    ${capabilityChips.join("")}
+                  </div>
+                  ${
+                    issueText
+                      ? `<div class="small text-muted mt-2">${escapeHtml(
+                          issueText
+                        )}</div>`
+                      : ""
+                  }
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+    }
+
+    function renderAiProbeState() {
+      if (!currentAiProbeState) {
+        return;
+      }
+
+      currentAiProbeState.auto_enabled = !!(
+        aiAutoSwitch && aiAutoSwitch.checked
+      );
+      currentAiProbeState.manual_model_name = aiManualModelInput
+        ? aiManualModelInput.value.trim()
+        : currentAiProbeState.manual_model_name || "";
+
+      syncAiAutoSwitchLabel();
+      syncAiProbeFields(currentAiProbeState);
+      renderAiProbeSummary(currentAiProbeState);
+      renderAiTaskCards(currentAiProbeState);
+      renderAiProbeDetails(currentAiProbeState);
+    }
+
+    if (aiAutoSwitch) {
+      aiAutoSwitch.addEventListener("change", renderAiProbeState);
+    }
+    if (aiManualModelInput) {
+      aiManualModelInput.addEventListener("input", renderAiProbeState);
+    }
+
+    renderAiProbeState();
+
+    if (detectAiModelsBtn) {
+      detectAiModelsBtn.addEventListener("click", function () {
+        const apiBaseUrl = document
+          .getElementById("ai_api_base_url")
+          .value.trim();
+        const apiKeyInput = document.getElementById("ai_api_key").value.trim();
+        const modelName = aiManualModelInput
+          ? aiManualModelInput.value.trim()
+          : "";
+
+        detectAiModelsBtn.disabled = true;
+        detectAiModelsBtn.innerHTML =
+          '<i class="bi bi-hourglass-split me-2"></i>检测中...';
+        testResultDiv.innerHTML =
+          '<div class="alert alert-info mb-0">正在拉取模型列表并检测兼容性，这可能需要十几秒。</div>';
+        testResultDiv.style.display = "block";
+
+        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        const csrfToken = csrfTokenMeta
+          ? csrfTokenMeta.getAttribute("content")
+          : "";
+
+        fetch("{{ url_for('admin.detect_ai_models') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+          },
+          body: JSON.stringify({
+            api_base_url: apiBaseUrl,
+            api_key: apiKeyInput,
+            model_name: modelName,
+            auto_enabled: !!(aiAutoSwitch && aiAutoSwitch.checked),
+          }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              currentAiProbeState = data.probe_state || {};
+              currentAiProbeState.manual_model_name = modelName;
+              currentAiProbeState.auto_enabled = !!(
+                aiAutoSwitch && aiAutoSwitch.checked
+              );
+              renderAiProbeState();
+              testResultDiv.innerHTML =
+                '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-2"></i>' +
+                data.message +
+                "</div>";
+            } else {
+              testResultDiv.innerHTML =
+                '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>' +
+                data.message +
+                "</div>";
+            }
+          })
+          .catch((error) => {
+            testResultDiv.innerHTML =
+              '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>模型检测失败: ' +
+              error.message +
+              "</div>";
+          })
+          .finally(() => {
+            detectAiModelsBtn.disabled = false;
+            detectAiModelsBtn.innerHTML =
+              '<i class="bi bi-stars me-2"></i>检测并推荐模型';
+          });
+      });
+    }
+
     if (testAiConfigBtn) {
       testAiConfigBtn.addEventListener("click", function () {
         const apiBaseUrl = document
           .getElementById("ai_api_base_url")
           .value.trim();
         const apiKeyInput = document.getElementById("ai_api_key").value.trim();
-        const modelName = document.getElementById("ai_model_name").value.trim();
-
-        // 如果输入框为空或包含*号（掩码），说明使用数据库中的配置
-        // 允许测试，后端会使用数据库中的真实key
-        if (!apiBaseUrl || !modelName) {
-          testResultDiv.innerHTML =
-            '<div class="alert alert-warning">请先填写API基础URL和模型名称</div>';
-          testResultDiv.style.display = "block";
-          return;
-        }
-
-        // 如果apiKey输入框为空或包含*号，说明是掩码，后端会使用数据库中的真实key
-        // 如果输入了新key，则使用输入的key进行测试
+        const effectiveModels = computeEffectiveAiModels(currentAiProbeState || {});
+        const modelName =
+          effectiveModels.intent ||
+          (aiManualModelInput ? aiManualModelInput.value.trim() : "");
 
         testAiConfigBtn.disabled = true;
         testAiConfigBtn.innerHTML =
           '<i class="bi bi-hourglass-split me-2"></i>测试中...';
         testResultDiv.innerHTML =
-          '<div class="alert alert-info">正在测试AI配置...</div>';
+          '<div class="alert alert-info mb-0">正在测试当前生效模型...</div>';
         testResultDiv.style.display = "block";
 
-        // 获取CSRF token
         const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
         const csrfToken = csrfTokenMeta
           ? csrfTokenMeta.getAttribute("content")
@@ -1547,7 +2079,7 @@
           },
           body: JSON.stringify({
             api_base_url: apiBaseUrl,
-            api_key: apiKeyInput, // 可能是掩码或新key，后端会判断
+            api_key: apiKeyInput,
             model_name: modelName,
           }),
         })
@@ -1555,26 +2087,26 @@
           .then((data) => {
             if (data.success) {
               testResultDiv.innerHTML =
-                '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>' +
+                '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-2"></i>' +
                 data.message +
                 "</div>";
             } else {
               testResultDiv.innerHTML =
-                '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>' +
+                '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>' +
                 data.message +
                 "</div>";
             }
           })
           .catch((error) => {
             testResultDiv.innerHTML =
-              '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>测试失败: ' +
+              '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>测试失败: ' +
               error.message +
               "</div>";
           })
           .finally(() => {
             testAiConfigBtn.disabled = false;
             testAiConfigBtn.innerHTML =
-              '<i class="bi bi-play-circle me-2"></i>测试AI配置';
+              '<i class="bi bi-play-circle me-2"></i>测试当前模型';
           });
       });
     }
@@ -1957,6 +2489,97 @@
   /* 修复 .mb-2 的 margin-bottom，确保对齐 */
   .mb-2 {
     margin-bottom: 0.5rem !important;
+  }
+
+  .ai-auto-model-card {
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  }
+
+  .ai-task-model-card {
+    height: 100%;
+    padding: 0.85rem;
+    border: 1px solid rgba(13, 110, 253, 0.12);
+    border-radius: 0.85rem;
+    background: #ffffff;
+  }
+
+  .ai-task-model-label {
+    font-weight: 600;
+    color: #1f2d3d;
+  }
+
+  .ai-task-model-description {
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+    line-height: 1.35;
+  }
+
+  .ai-task-model-name {
+    margin-top: 0.8rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .ai-inline-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.9rem;
+    padding: 0.28rem 0.65rem;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.95);
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .ai-header-switch {
+    margin-top: 0 !important;
+    margin-bottom: 0;
+  }
+
+  .ai-task-model-empty {
+    padding: 0.95rem 1rem;
+    border: 1px dashed rgba(13, 110, 253, 0.22);
+    border-radius: 0.85rem;
+    background: rgba(248, 249, 250, 0.75);
+  }
+
+  .ai-probe-details {
+    border: 1px solid rgba(108, 117, 125, 0.14);
+    border-radius: 0.85rem;
+    background: rgba(248, 249, 250, 0.8);
+  }
+
+  .ai-probe-list {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 0.4rem;
+  }
+
+  .ai-probe-item {
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    background: #fff;
+  }
+
+  .ai-probe-item + .ai-probe-item {
+    margin-top: 0.5rem;
+  }
+
+  @media (max-width: 767.98px) {
+    .ai-task-model-card {
+      min-height: auto;
+    }
+
+    .ai-probe-list {
+      max-height: 280px;
+    }
   }
 </style>
 {% endblock %}

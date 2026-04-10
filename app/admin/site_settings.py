@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 """站点设置管理路由"""
 
+from datetime import datetime
+from typing import Optional
+
 from flask import render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required
 from app import db
@@ -10,7 +13,115 @@ from app.admin.forms import SiteSettingsForm
 from app.admin.decorators import superadmin_required
 from app.admin.utils import save_image
 from app.models import SiteSettings
-from app.utils.ai_search import AISearchService
+from app.utils.ai_model_discovery import (
+    compute_ai_probe_signature,
+    discover_and_probe_models,
+    summarize_probe_catalog,
+)
+from app.utils.ai_search import (
+    AISearchService,
+    AICompatibilityError,
+    AIEmptyResponseError,
+    AIJSONParseError,
+    get_ai_model_for_task,
+)
+
+
+def _format_ai_structured_output_error(error: Exception) -> str:
+    if isinstance(error, AIEmptyResponseError):
+        reason = f"接口已连通，但模型返回了空内容或非直接文本内容：{str(error)}"
+        suggestion = "请优先选择会直接输出文本内容的聊天模型，并关闭工具调用/仅推理模式。"
+    elif isinstance(error, AIJSONParseError):
+        reason = f"接口已连通，但结构化 JSON 输出解析失败：{str(error)}"
+        suggestion = "请使用能稳定输出 JSON 的聊天模型，或更换兼容性更好的 OpenAI 兼容接口。"
+    elif isinstance(error, AICompatibilityError):
+        reason = f"接口已连通，但返回格式与当前项目不兼容：{str(error)}"
+        suggestion = "请确保 /v1/chat/completions 返回标准文本内容，并避免返回 tool_calls 作为最终结果。"
+    else:
+        reason = f"接口已连通，但结构化功能测试失败：{str(error)}"
+        suggestion = "请检查当前模型是否适合稳定文本/JSON 输出。"
+    return f"❌ AI 接口连通成功，但项目结构化功能测试失败\n原因：{reason}\n建议：{suggestion}"
+
+
+def _resolve_ai_request_config(data: dict, settings: SiteSettings) -> tuple[str, str, str]:
+    api_base_url = (data.get('api_base_url') or '').strip()
+    api_key_input = (data.get('api_key') or '').strip()
+    model_name = (data.get('model_name') or '').strip()
+
+    if not api_base_url:
+        api_base_url = (settings.ai_api_base_url or '').strip()
+
+    if not api_key_input or '*' in api_key_input:
+        api_key = (settings.ai_api_key or '').strip()
+    else:
+        api_key = api_key_input
+
+    if not model_name:
+        model_name = (
+            get_ai_model_for_task(settings, task='intent')
+            or (settings.ai_model_name or '').strip()
+        )
+
+    return api_base_url, api_key, model_name
+
+
+def _parse_probe_datetime(value: str) -> Optional[datetime]:
+    value = (value or '').strip()
+    if not value:
+        return None
+
+    normalized = value.replace('Z', '+00:00')
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def _clear_ai_probe_results(settings: SiteSettings) -> None:
+    settings.ai_model_catalog_json = None
+    settings.ai_selected_intent_model = None
+    settings.ai_selected_rerank_model = None
+    settings.ai_selected_translate_model = None
+    settings.ai_selected_site_info_model = None
+    settings.ai_selected_fallback_model = None
+    settings.ai_model_probe_last_at = None
+    settings.ai_model_probe_signature = None
+
+
+def _build_ai_probe_state(settings: SiteSettings) -> dict:
+    catalog = settings.get_ai_model_catalog()
+    current_signature = compute_ai_probe_signature(
+        settings.ai_api_base_url or '',
+        settings.ai_api_key or '',
+    )
+    stored_signature = (settings.ai_model_probe_signature or '').strip()
+    probe_stale = bool(
+        catalog
+        and current_signature
+        and stored_signature
+        and stored_signature != current_signature
+    )
+    if catalog and current_signature and not stored_signature:
+        probe_stale = True
+
+    return {
+        'auto_enabled': bool(getattr(settings, 'ai_auto_model_selection_enabled', True)),
+        'manual_model_name': (settings.ai_model_name or '').strip(),
+        'selected_models': {
+            key: (value or '')
+            for key, value in settings.get_ai_selected_models().items()
+        },
+        'catalog': catalog,
+        'stats': summarize_probe_catalog(catalog),
+        'probe_last_at': settings.ai_model_probe_last_at.isoformat() if settings.ai_model_probe_last_at else '',
+        'probe_error': settings.ai_model_probe_error or '',
+        'probe_signature': stored_signature,
+        'probe_stale': probe_stale,
+    }
 
 
 @bp.route('/site-settings', methods=['GET', 'POST'])
@@ -144,12 +255,40 @@ def site_settings():
             if api_key_input and not is_masked:
                 settings.ai_api_key = api_key_input
             settings.ai_model_name = form.ai_model_name.data
+            settings.ai_auto_model_selection_enabled = bool(request.form.get('ai_auto_model_selection_enabled'))
             try:
                 settings.ai_temperature = float(form.ai_temperature.data) if form.ai_temperature.data else 0.7
             except (ValueError, TypeError):
                 settings.ai_temperature = 0.7
             settings.ai_max_tokens = form.ai_max_tokens.data if form.ai_max_tokens.data else 500
-            
+
+            probe_signature = compute_ai_probe_signature(
+                settings.ai_api_base_url or '',
+                settings.ai_api_key or '',
+            )
+            submitted_probe_signature = (request.form.get('ai_model_probe_signature') or '').strip()
+            submitted_probe_error = (request.form.get('ai_model_probe_error') or '').strip()
+            submitted_catalog_json = (request.form.get('ai_model_catalog_json') or '').strip()
+
+            if not probe_signature:
+                _clear_ai_probe_results(settings)
+                settings.ai_model_probe_error = None
+            elif submitted_probe_signature and submitted_probe_signature == probe_signature:
+                settings.ai_model_catalog_json = submitted_catalog_json or None
+                settings.ai_selected_intent_model = (request.form.get('ai_selected_intent_model') or '').strip() or None
+                settings.ai_selected_rerank_model = (request.form.get('ai_selected_rerank_model') or '').strip() or None
+                settings.ai_selected_translate_model = (request.form.get('ai_selected_translate_model') or '').strip() or None
+                settings.ai_selected_site_info_model = (request.form.get('ai_selected_site_info_model') or '').strip() or None
+                settings.ai_selected_fallback_model = (request.form.get('ai_selected_fallback_model') or '').strip() or None
+                settings.ai_model_probe_last_at = _parse_probe_datetime(
+                    request.form.get('ai_model_probe_last_at', '')
+                )
+                settings.ai_model_probe_error = submitted_probe_error or None
+                settings.ai_model_probe_signature = submitted_probe_signature
+            elif settings.ai_model_probe_signature and settings.ai_model_probe_signature != probe_signature:
+                _clear_ai_probe_results(settings)
+                settings.ai_model_probe_error = 'AI API 配置已变更，请重新检测模型'
+
             # 更新向量搜索设置
             settings.vector_search_enabled = form.vector_search_enabled.data
             # 更新 Embedding API 配置（独立配置）
@@ -175,11 +314,11 @@ def site_settings():
             settings.vector_max_results = form.vector_max_results.data if form.vector_max_results.data else 50
             
             # 检查AI配置是否完整
-            ai_configured = all([
-                settings.ai_api_base_url,
-                settings.ai_api_key,
-                settings.ai_model_name
-            ])
+            ai_configured = bool(
+                settings.ai_api_base_url
+                and settings.ai_api_key
+                and get_ai_model_for_task(settings)
+            )
             
             # 检查向量搜索配置是否完整（使用 get_embedding_api_config 方法，支持向后兼容）
             embedding_api_url, embedding_api_key = settings.get_embedding_api_config()
@@ -215,7 +354,13 @@ def site_settings():
                 flash(f'保存设置失败: {str(e)}', 'danger')
                 current_app.logger.error(f"保存站点设置失败: {str(e)}")
                 
-        return render_template('admin/site_settings.html', title='站点设置', form=form, settings=settings)
+        return render_template(
+            'admin/site_settings.html',
+            title='站点设置',
+            form=form,
+            settings=settings,
+            ai_probe_state=_build_ai_probe_state(settings),
+        )
     except Exception as e:
         flash(f'加载站点设置失败: {str(e)}', 'danger')
         current_app.logger.error(f"加载站点设置失败: {str(e)}")
@@ -228,31 +373,14 @@ def site_settings():
 def test_ai_config():
     """测试AI配置是否有效"""
     try:
-        data = request.get_json()
-        api_base_url = data.get('api_base_url', '').strip()
-        api_key_input = data.get('api_key', '').strip()
-        model_name = data.get('model_name', '').strip()
-        
-        # 获取数据库中的真实配置
+        data = request.get_json(silent=True) or {}
         settings = SiteSettings.get_settings()
-        
-        # 如果输入框为空或包含*号（掩码），使用数据库中的真实key
-        if not api_key_input or '*' in api_key_input:
-            api_key = settings.ai_api_key or ''
-        else:
-            # 如果输入了新key，使用输入的key
-            api_key = api_key_input
-        
-        # 如果URL或模型名为空，使用数据库中的值
-        if not api_base_url:
-            api_base_url = settings.ai_api_base_url or ''
-        if not model_name:
-            model_name = settings.ai_model_name or ''
+        api_base_url, api_key, model_name = _resolve_ai_request_config(data, settings)
         
         if not all([api_base_url, api_key, model_name]):
             return jsonify({
                 'success': False,
-                'message': '请填写完整的API配置信息，或确保已保存配置'
+                'message': '请填写完整的 API 基础URL、API 密钥，或先完成模型检测'
             }), 400
         
         # 先进行简单的API连接测试，获取详细的错误信息
@@ -308,9 +436,25 @@ def test_ai_config():
             
             return jsonify({
                 'success': True,
-                'message': 'AI配置测试成功！',
-                'result': test_result
+                'message': f'AI配置测试成功，模型 {model_name} 接口连通且结构化输出正常',
+                'result': test_result,
+                'details': {
+                    'transport_ok': True,
+                    'structured_output_ok': True,
+                    'tested_model': model_name
+                }
             })
+        except (AIEmptyResponseError, AIJSONParseError, AICompatibilityError) as e:
+            current_app.logger.error(f"AI结构化功能测试失败: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': _format_ai_structured_output_error(e),
+                'details': {
+                    'transport_ok': True,
+                    'structured_output_ok': False,
+                    'error_type': type(e).__name__
+                }
+            }), 400
         except Exception as e:
             # AISearchService调用失败（这种情况应该很少，因为前面测试已通过）
             current_app.logger.error(f"AI服务调用失败: {str(e)}")
@@ -344,6 +488,70 @@ def test_ai_config():
             response=None
         )
         
+        return jsonify({
+            'success': False,
+            'message': format_error_for_display(error_info)
+        }), 400
+
+
+@bp.route('/api/detect-ai-models', methods=['POST'])
+@login_required
+@superadmin_required
+def detect_ai_models():
+    """探测当前 API Key 下可用的模型，并为项目自动推荐任务模型。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        settings = SiteSettings.get_settings()
+        api_base_url, api_key, model_name = _resolve_ai_request_config(data, settings)
+
+        if not all([api_base_url, api_key]):
+            return jsonify({
+                'success': False,
+                'message': '请先填写 API 基础URL 和 API 密钥，或确保已保存配置'
+            }), 400
+
+        discovery = discover_and_probe_models(
+            api_base_url=api_base_url,
+            api_key=api_key,
+            preferred_model=model_name,
+        )
+
+        probe_state = {
+            'auto_enabled': bool(data.get('auto_enabled', True)),
+            'manual_model_name': model_name,
+            'selected_models': discovery['selected_models'],
+            'catalog': discovery['catalog'],
+            'stats': discovery['stats'],
+            'probe_last_at': discovery['probe_last_at'],
+            'probe_error': '',
+            'probe_signature': discovery['probe_signature'],
+            'probe_stale': False,
+        }
+
+        stats = discovery['stats']
+        return jsonify({
+            'success': True,
+            'message': (
+                f"模型检测完成：共发现 {stats['total_models']} 个模型，"
+                f"其中 {stats['compatible_models']} 个适合当前项目，"
+                f"{stats['partial_models']} 个可部分兼容。"
+            ),
+            'probe_state': probe_state
+        })
+    except Exception as e:
+        current_app.logger.error(f"AI模型检测失败: {str(e)}")
+
+        from app.utils.api_error_handler import classify_api_error, format_error_for_display
+
+        error_info = classify_api_error(
+            exception=e,
+            api_type='ai',
+            api_base_url=api_base_url if 'api_base_url' in locals() else '',
+            model_name=model_name if 'model_name' in locals() else '',
+            api_key=api_key if 'api_key' in locals() else '',
+            response=getattr(e, 'response', None)
+        )
+
         return jsonify({
             'success': False,
             'message': format_error_for_display(error_info)

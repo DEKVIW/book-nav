@@ -111,7 +111,17 @@ def migrate_site_settings_fields(db_path: str) -> int:
             ('ai_api_key', 'VARCHAR(512)'),
             ('ai_model_name', 'VARCHAR(128)'),
             ('ai_temperature', 'REAL DEFAULT 0.7'),
-            ('ai_max_tokens', 'INTEGER DEFAULT 500')
+            ('ai_max_tokens', 'INTEGER DEFAULT 500'),
+            ('ai_auto_model_selection_enabled', 'BOOLEAN DEFAULT 1'),
+            ('ai_model_catalog_json', 'TEXT'),
+            ('ai_selected_intent_model', 'VARCHAR(128)'),
+            ('ai_selected_rerank_model', 'VARCHAR(128)'),
+            ('ai_selected_translate_model', 'VARCHAR(128)'),
+            ('ai_selected_site_info_model', 'VARCHAR(128)'),
+            ('ai_selected_fallback_model', 'VARCHAR(128)'),
+            ('ai_model_probe_last_at', 'DATETIME'),
+            ('ai_model_probe_error', 'TEXT'),
+            ('ai_model_probe_signature', 'VARCHAR(64)')
         ]
         
         # 向量搜索配置字段
