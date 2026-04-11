@@ -591,23 +591,26 @@
 
                   <div class="card shadow-sm border-0 h-100">
                     <div class="card-body d-flex flex-column">
-                      <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
-                        <div>
-                          <h6 class="mb-1">
-                            <i class="bi bi-robot me-2"></i>AI搜索配置
-                          </h6>
-                          <div class="text-muted small">
-                            多提供方轮询兜底，四项任务可分别绑定不同模型。
+                      <div class="mb-3">
+                        <h6 class="mb-1">
+                          <i class="bi bi-robot me-2"></i>AI搜索配置
+                        </h6>
+                        <div class="text-muted small">
+                          多提供方轮询兜底，四项任务可分别绑定不同模型。
+                        </div>
+                      </div>
+
+                      <div class="ai-mgr-step-row mb-3">
+                        <div class="ai-mgr-step-card">
+                          <span class="ai-mgr-step-index">1</span>
+                          <div>
+                            <div class="fw-semibold small">先配置 AI 提供方</div>
+                            <div class="text-muted ai-mgr-switch-hint">
+                              至少先添加 1 个可用提供方，再执行自动模型选型和后续任务绑定。
+                            </div>
                           </div>
                         </div>
-                        <div class="d-flex flex-wrap gap-2 justify-content-end">
-                          <button
-                            type="button"
-                            id="aiMgrDetectAllBtn"
-                            class="btn btn-primary btn-sm"
-                          >
-                            <i class="bi bi-stars me-2"></i>自动模型选型
-                          </button>
+                        <div class="d-flex flex-wrap gap-2 justify-content-end ai-mgr-step-actions">
                           <button
                             type="button"
                             class="btn btn-outline-secondary btn-sm"
@@ -615,6 +618,13 @@
                             data-bs-target="#aiProvidersModal"
                           >
                             <i class="bi bi-plug me-2"></i>提供方配置
+                          </button>
+                          <button
+                            type="button"
+                            id="aiMgrDetectAllBtn"
+                            class="btn btn-primary btn-sm"
+                          >
+                            <i class="bi bi-stars me-2"></i>自动模型选型
                           </button>
                         </div>
                       </div>
@@ -652,38 +662,49 @@
 
                       <div id="aiMgrSummary" class="d-flex flex-wrap gap-2 mb-3"></div>
 
-                      <div class="d-flex flex-wrap gap-2 mb-3">
-                        <button
-                          type="button"
-                          class="btn btn-outline-primary btn-sm"
-                          data-bs-toggle="modal"
-                          data-bs-target="#aiTaskBindingsModal"
-                        >
-                          <i class="bi bi-diagram-3 me-2"></i>任务模型
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-outline-secondary btn-sm"
-                          data-bs-toggle="modal"
-                          data-bs-target="#aiOverviewModal"
-                        >
-                          <i class="bi bi-eye me-2"></i>查看配置
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-outline-secondary btn-sm"
-                          data-bs-toggle="modal"
-                          data-bs-target="#aiAdvancedSettingsModal"
-                        >
-                          <i class="bi bi-sliders me-2"></i>高级设置
-                        </button>
-                        <button
-                          type="button"
-                          id="aiMgrRunTaskTestsBtn"
-                          class="btn btn-outline-success btn-sm"
-                        >
-                          <i class="bi bi-activity me-2"></i>四项测试
-                        </button>
+                      <div class="ai-mgr-step-row mb-3">
+                        <div class="ai-mgr-step-card">
+                          <span class="ai-mgr-step-index">2</span>
+                          <div>
+                            <div class="fw-semibold small">再绑定任务模型并逐项测试</div>
+                            <div class="text-muted ai-mgr-switch-hint">
+                              查看当前生效配置，分别验证翻译、搜索、重排和补全是否跑通。
+                            </div>
+                          </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 justify-content-end ai-mgr-step-actions">
+                          <button
+                            type="button"
+                            class="btn btn-outline-primary btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#aiTaskBindingsModal"
+                          >
+                            <i class="bi bi-diagram-3 me-2"></i>任务模型
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#aiOverviewModal"
+                          >
+                            <i class="bi bi-eye me-2"></i>查看配置
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#aiAdvancedSettingsModal"
+                          >
+                            <i class="bi bi-sliders me-2"></i>高级设置
+                          </button>
+                          <button
+                            type="button"
+                            id="aiMgrRunTaskTestsBtn"
+                            class="btn btn-outline-success btn-sm"
+                          >
+                            <i class="bi bi-activity me-2"></i>四项测试
+                          </button>
+                        </div>
                       </div>
 
                       <div id="aiMgrFeedback" class="d-none mb-3"></div>
@@ -698,7 +719,7 @@
                     aria-labelledby="aiProvidersModalLabel"
                     aria-hidden="true"
                   >
-                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
                       <div class="modal-content">
                         <div class="modal-header">
                           <h5 class="modal-title" id="aiProvidersModalLabel">
@@ -721,13 +742,20 @@
                           ></button>
                         </div>
                         <div class="modal-body">
+                          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                            <div class="text-muted small">
+                              可配置多个提供方，按优先级自动轮询兜底，检测状态也会直接显示在列表里。
+                            </div>
+                            <span class="ai-mgr-chip">API Key 单独一列</span>
+                          </div>
                           <div id="aiProvidersModalFeedback" class="d-none mb-3"></div>
-                          <div class="table-responsive">
-                            <table class="table table-sm align-middle mb-0">
+                          <div class="table-responsive ai-mgr-table-wrap">
+                            <table class="table table-sm align-middle ai-mgr-table mb-0">
                               <thead>
                                 <tr>
                                   <th>名称</th>
                                   <th>URL</th>
+                                  <th>API Key</th>
                                   <th>接口模式</th>
                                   <th>检测状态</th>
                                   <th>优先级</th>
@@ -825,7 +853,7 @@
                     aria-labelledby="aiTaskBindingsModalLabel"
                     aria-hidden="true"
                   >
-                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
                       <div class="modal-content">
                         <div class="modal-header">
                           <h5 class="modal-title" id="aiTaskBindingsModalLabel">
@@ -842,10 +870,11 @@
                           <div class="text-muted small mb-3">
                             每项任务可选择自动推荐，也可以手动指定某个提供方下的具体模型。
                           </div>
+                          <div id="aiTaskBindingsFeedback" class="d-none mb-3"></div>
                           <div id="aiTaskBindingsRows" class="row g-3"></div>
-                          <div id="aiTaskBindingsFeedback" class="d-none mt-3"></div>
                         </div>
                         <div class="modal-footer">
+                          <div id="aiTaskBindingsFooterFeedback" class="d-none me-auto"></div>
                           <button
                             type="button"
                             class="btn btn-outline-secondary btn-sm"
@@ -868,7 +897,7 @@
                     aria-labelledby="aiOverviewModalLabel"
                     aria-hidden="true"
                   >
-                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
                       <div class="modal-content">
                         <div class="modal-header">
                           <h5 class="modal-title" id="aiOverviewModalLabel">
@@ -1730,6 +1759,7 @@
     const aiProviderEditorFeedback = document.getElementById("aiProviderEditorFeedback");
     const aiTaskBindingsRows = document.getElementById("aiTaskBindingsRows");
     const aiTaskBindingsFeedback = document.getElementById("aiTaskBindingsFeedback");
+    const aiTaskBindingsFooterFeedback = document.getElementById("aiTaskBindingsFooterFeedback");
     const aiOverviewBody = document.getElementById("aiOverviewBody");
     const aiProviderSaveBtn = document.getElementById("aiProviderSaveBtn");
     const aiSaveTaskBindingsBtn = document.getElementById("aiSaveTaskBindingsBtn");
@@ -1740,8 +1770,13 @@
     const aiOverviewModalEl = document.getElementById("aiOverviewModal");
 
     const aiProviderEditorModal = aiProviderEditorModalEl && window.bootstrap
-      ? new bootstrap.Modal(aiProviderEditorModalEl)
+      ? bootstrap.Modal.getOrCreateInstance(aiProviderEditorModalEl)
       : null;
+    const aiProvidersModal = aiProvidersModalEl && window.bootstrap
+      ? bootstrap.Modal.getOrCreateInstance(aiProvidersModalEl)
+      : null;
+    let aiPendingProviderEditorRequest = null;
+    let aiReturnToProvidersModal = false;
 
     function aiEscapeHtml(value) {
       return String(value || "")
@@ -1775,6 +1810,67 @@
           target.classList.add("d-none");
         }, 5000);
       }
+    }
+
+    function aiHideFeedback(target) {
+      if (!target) {
+        return;
+      }
+      window.clearTimeout(target._hideTimer);
+      target.classList.add("d-none");
+      target.innerHTML = "";
+    }
+
+    function aiEllipsisHtml(value, className, fallback) {
+      const text = String(value || "").trim() || (fallback || "-");
+      const classes = ["ai-mgr-ellipsis"];
+      if (className) {
+        classes.push(className);
+      }
+      return `<span class="${classes.join(" ")}" title="${aiEscapeHtml(text)}">${aiEscapeHtml(text)}</span>`;
+    }
+
+    function aiFormatDateTime(value) {
+      const text = String(value || "").trim();
+      if (!text) {
+        return "";
+      }
+      return text.replace("T", " ").replace("Z", "").slice(0, 16);
+    }
+
+    function aiProviderModeLabel(mode) {
+      return {
+        auto: "自动兜底",
+        chat: "Chat",
+        responses: "Responses",
+      }[mode || "auto"] || "自动兜底";
+    }
+
+    function aiProviderProbeState(provider) {
+      const stats = provider && provider.stats ? provider.stats : {};
+      const probeLastAt = aiFormatDateTime(provider && provider.probe_last_at);
+      if (provider && provider.probe_error) {
+        return {
+          badgeClass: "text-bg-danger",
+          badgeText: "检测失败",
+          summary: provider.probe_error,
+          detail: probeLastAt ? `最近检测 ${probeLastAt}` : "请检查接口和模型目录权限",
+        };
+      }
+      if (stats.total_models) {
+        return {
+          badgeClass: "text-bg-success",
+          badgeText: "已检测",
+          summary: `适配 ${stats.compatible_models || 0}/${stats.total_models || 0}`,
+          detail: probeLastAt ? `最近检测 ${probeLastAt}` : "已获取模型目录",
+        };
+      }
+      return {
+        badgeClass: "text-bg-secondary",
+        badgeText: "未检测",
+        summary: "尚未获取模型目录",
+        detail: "点击检测或自动模型选型开始",
+      };
     }
 
     function aiUpdateHiddenState() {
@@ -1882,11 +1978,8 @@
     }
 
     function aiProviderStatsText(provider) {
-      const stats = provider.stats || {};
-      if (!stats.total_models) {
-        return provider.probe_error ? "检测失败" : "未检测";
-      }
-      return `适配 ${stats.compatible_models || 0}/${stats.total_models || 0}`;
+      const probeState = aiProviderProbeState(provider);
+      return probeState.badgeText === "检测失败" ? "检测失败" : probeState.summary;
     }
 
     function aiRenderProvidersTable() {
@@ -1897,38 +1990,47 @@
       aiProvidersEmpty.classList.toggle("d-none", providers.length > 0);
       aiProvidersTableBody.innerHTML = providers
         .map((provider) => {
-          const modeLabel = {
-            auto: "自动兜底",
-            chat: "Chat",
-            responses: "Responses",
-          }[provider.interface_mode || "auto"] || "自动兜底";
+          const modeLabel = aiProviderModeLabel(provider.interface_mode);
           const statusBadge = provider.enabled
             ? '<span class="badge text-bg-success">启用</span>'
             : '<span class="badge text-bg-secondary">停用</span>';
-          const probeBadge = provider.stats && provider.stats.total_models
-            ? `<span class="badge text-bg-light">${aiEscapeHtml(aiProviderStatsText(provider))}</span>`
-            : '<span class="badge text-bg-light">未检测</span>';
+          const probeState = aiProviderProbeState(provider);
+          const probeTitle = [probeState.summary, probeState.detail].filter(Boolean).join(" | ");
           return `
             <tr>
               <td>
-                <div class="fw-semibold">${aiEscapeHtml(provider.name || "默认 AI 提供方")}</div>
-                <div class="small text-muted">${aiEscapeHtml(provider.api_key_masked || "未保存密钥")}</div>
-              </td>
-              <td class="small text-break">${aiEscapeHtml(provider.api_base_url || "")}</td>
-              <td>${aiEscapeHtml(modeLabel)}</td>
-              <td>
-                <div class="d-flex flex-wrap gap-2">
-                  ${statusBadge}
-                  ${probeBadge}
+                <div class="ai-mgr-provider-cell">
+                  <div class="fw-semibold">${aiEllipsisHtml(provider.name || "默认 AI 提供方", "name", "默认 AI 提供方")}</div>
+                  <div class="mt-1">${statusBadge}</div>
                 </div>
               </td>
-              <td>${aiEscapeHtml(String(provider.priority || 100))}</td>
+              <td>
+                ${aiEllipsisHtml(provider.api_base_url || "", "url", "-")}
+              </td>
+              <td>
+                ${aiEllipsisHtml(provider.api_key_masked || "未保存密钥", "key", "未保存密钥")}
+              </td>
+              <td>
+                <span class="badge text-bg-light">${aiEscapeHtml(modeLabel)}</span>
+              </td>
+              <td>
+                <div class="ai-mgr-status-stack" title="${aiEscapeHtml(probeTitle)}">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge ${probeState.badgeClass}">${aiEscapeHtml(probeState.badgeText)}</span>
+                    <span class="small text-muted">${aiEllipsisHtml(probeState.summary, "status", probeState.summary)}</span>
+                  </div>
+                  <div class="small text-muted mt-1">
+                    ${aiEllipsisHtml(probeState.detail, "status", probeState.detail)}
+                  </div>
+                </div>
+              </td>
+              <td class="text-center">${aiEscapeHtml(String(provider.priority || 100))}</td>
               <td class="text-end">
-                <div class="btn-group btn-group-sm" role="group">
-                  <button type="button" class="btn btn-outline-secondary" data-action="edit" data-provider-id="${provider.id}">编辑</button>
-                  <button type="button" class="btn btn-outline-primary" data-action="detect" data-provider-id="${provider.id}">检测</button>
-                  <button type="button" class="btn btn-outline-success" data-action="test" data-provider-id="${provider.id}">测试</button>
-                  <button type="button" class="btn btn-outline-danger" data-action="delete" data-provider-id="${provider.id}">删除</button>
+                <div class="ai-mgr-action-group justify-content-end">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" data-action="edit" data-provider-id="${provider.id}">编辑</button>
+                  <button type="button" class="btn btn-outline-primary btn-sm" data-action="detect" data-provider-id="${provider.id}">检测</button>
+                  <button type="button" class="btn btn-outline-success btn-sm" data-action="test" data-provider-id="${provider.id}">测试</button>
+                  <button type="button" class="btn btn-outline-danger btn-sm" data-action="delete" data-provider-id="${provider.id}">删除</button>
                 </div>
               </td>
             </tr>
@@ -2027,24 +2129,66 @@
       const bindings = aiManagementState.task_bindings || {};
       const effectiveTasks = aiManagementState.effective_tasks || {};
       const taskResults = aiManagementState.task_test_results || {};
+      const providerRows = providers.length
+        ? providers.map((provider) => {
+          const probeState = aiProviderProbeState(provider);
+          const recommended = provider.recommended_models || {};
+          const recommendedSummary = [
+            recommended.intent ? `意图:${recommended.intent}` : "",
+            recommended.rerank ? `重排:${recommended.rerank}` : "",
+            recommended.translate ? `翻译:${recommended.translate}` : "",
+            recommended.site_info ? `补全:${recommended.site_info}` : "",
+          ].filter(Boolean).join(" | ") || "未生成推荐";
+          return `
+            <tr>
+              <td>${aiEllipsisHtml(provider.name || "默认 AI 提供方", "name", "默认 AI 提供方")}</td>
+              <td>${aiEllipsisHtml(provider.api_base_url || "", "url", "-")}</td>
+              <td>${aiEllipsisHtml(provider.api_key_masked || "未保存密钥", "key", "未保存密钥")}</td>
+              <td><span class="badge text-bg-light">${aiEscapeHtml(aiProviderModeLabel(provider.interface_mode))}</span></td>
+              <td>${aiEllipsisHtml(probeState.badgeText + " | " + probeState.summary, "status", probeState.summary)}</td>
+              <td>${aiEllipsisHtml(recommendedSummary, "model", recommendedSummary)}</td>
+              <td class="text-center">${aiEscapeHtml(String(provider.priority || 100))}</td>
+            </tr>
+          `;
+        }).join("")
+        : '<tr><td colspan="7" class="text-center text-muted py-4">尚未配置提供方</td></tr>';
       aiOverviewBody.innerHTML = `
-        <div class="mb-3">
-          <div class="fw-semibold mb-2">提供方概览</div>
-          <div class="d-flex flex-wrap gap-2">
-            ${providers.length ? providers.map((provider) => `<span class="ai-mgr-chip">${aiEscapeHtml(provider.name || "默认提供方")} · ${aiEscapeHtml(aiProviderStatsText(provider))}</span>`).join("") : '<span class="text-muted small">尚未配置提供方</span>'}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          ${providers.length ? providers.map((provider) => `<span class="ai-mgr-chip">${aiEscapeHtml(provider.name || "默认提供方")} · ${aiEscapeHtml(aiProviderStatsText(provider))}</span>`).join("") : '<span class="ai-mgr-chip">尚未配置提供方</span>'}
+        </div>
+        <div class="ai-mgr-overview-section mb-4">
+          <div class="fw-semibold mb-2">提供方清单</div>
+          <div class="table-responsive ai-mgr-table-wrap">
+            <table class="table table-sm align-middle ai-mgr-table mb-0">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>URL</th>
+                  <th>API Key</th>
+                  <th>接口模式</th>
+                  <th>检测状态</th>
+                  <th>推荐模型</th>
+                  <th>优先级</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${providerRows}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div>
+        <div class="ai-mgr-overview-section">
           <div class="fw-semibold mb-2">任务生效情况</div>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
+          <div class="table-responsive ai-mgr-table-wrap">
+            <table class="table table-sm align-middle ai-mgr-table mb-0">
               <thead>
                 <tr>
                   <th>任务</th>
                   <th>模式</th>
-                  <th>提供方</th>
-                  <th>模型</th>
-                  <th>测试状态</th>
+                  <th>生效提供方</th>
+                  <th>生效模型</th>
+                  <th>最近协议</th>
+                  <th>最近结果</th>
                 </tr>
               </thead>
               <tbody>
@@ -2052,13 +2196,15 @@
                   const binding = bindings[taskKey] || { mode: "auto" };
                   const effective = effectiveTasks[taskKey] || {};
                   const result = taskResults[taskKey] || { status: "idle", message: "" };
+                  const resultText = result.message || aiStatusMeta(result.status || "idle").text;
                   return `
                     <tr>
                       <td>${meta.label}</td>
                       <td>${aiEscapeHtml(aiTaskModeLabel(binding.mode || "auto"))}</td>
-                      <td>${aiEscapeHtml(effective.provider_name || "-")}</td>
-                      <td class="text-break">${aiEscapeHtml(effective.model_name || binding.model_name || "-")}</td>
-                      <td>${aiEscapeHtml(result.message || aiStatusMeta(result.status || "idle").text)}</td>
+                      <td>${aiEllipsisHtml(effective.provider_name || "-", "name", "-")}</td>
+                      <td>${aiEllipsisHtml(effective.model_name || binding.model_name || "-", "model", "-")}</td>
+                      <td>${aiEllipsisHtml(result.protocol || "未记录", "protocol", "未记录")}</td>
+                      <td>${aiEllipsisHtml(resultText, "status", resultText)}</td>
                     </tr>
                   `;
                 }).join("")}
@@ -2086,7 +2232,7 @@
       aiRenderAll();
     }
 
-    function aiOpenProviderEditor(provider) {
+    function aiPopulateProviderEditor(provider) {
       document.getElementById("aiProviderId").value = provider && provider.id ? provider.id : "";
       document.getElementById("aiProviderName").value = provider && provider.name ? provider.name : "";
       document.getElementById("aiProviderBaseUrl").value = provider && provider.api_base_url ? provider.api_base_url : "";
@@ -2101,6 +2247,18 @@
       if (titleEl) {
         titleEl.textContent = provider ? "编辑提供方" : "添加提供方";
       }
+    }
+
+    function aiOpenProviderEditor(provider, reopenProviders) {
+      const shouldReturn = !!reopenProviders;
+      if (shouldReturn && aiProvidersModal && aiProvidersModalEl && aiProvidersModalEl.classList.contains("show")) {
+        aiPendingProviderEditorRequest = { provider: provider || null, reopenProviders: true };
+        aiProvidersModal.hide();
+        return;
+      }
+      aiPendingProviderEditorRequest = null;
+      aiReturnToProvidersModal = shouldReturn;
+      aiPopulateProviderEditor(provider);
       if (aiProviderEditorModal) {
         aiProviderEditorModal.show();
       }
@@ -2136,7 +2294,7 @@
 
     if (aiMgrAddProviderBtn) {
       aiMgrAddProviderBtn.addEventListener("click", function () {
-        aiOpenProviderEditor(null);
+        aiOpenProviderEditor(null, true);
       });
     }
 
@@ -2166,6 +2324,7 @@
             if (data.success) {
               aiApplyState(data.state || aiManagementState);
               aiShowFeedback(aiProvidersModalFeedback, "success", data.message, true);
+              aiShowFeedback(aiMgrFeedback, "success", data.message, true);
               if (aiProviderEditorModal) {
                 aiProviderEditorModal.hide();
               }
@@ -2196,7 +2355,7 @@
         }
 
         if (action === "edit") {
-          aiOpenProviderEditor(provider);
+          aiOpenProviderEditor(provider, true);
           return;
         }
 
@@ -2285,6 +2444,10 @@
 
     if (aiDetectAllProvidersBtn) {
       aiDetectAllProvidersBtn.addEventListener("click", function () {
+        if (!aiGetProviders().length) {
+          aiShowFeedback(aiMgrFeedback, "warning", "请先至少配置 1 个 AI 提供方。", true);
+          return;
+        }
         aiDetectAllProvidersBtn.disabled = true;
         aiShowFeedback(aiMgrFeedback, "info", "正在检测所有已启用提供方，并重新推荐模型...", true);
         fetch("{{ url_for('admin.detect_all_ai_providers') }}", {
@@ -2359,12 +2522,16 @@
             if (data.success) {
               aiApplyState(data.state || aiManagementState);
               aiShowFeedback(aiTaskBindingsFeedback, "success", data.message, true);
+              aiShowFeedback(aiTaskBindingsFooterFeedback, "success", data.message, true);
+              aiShowFeedback(aiMgrFeedback, "success", data.message, true);
             } else {
               aiShowFeedback(aiTaskBindingsFeedback, "danger", data.message, true);
+              aiShowFeedback(aiTaskBindingsFooterFeedback, "danger", data.message, true);
             }
           })
           .catch((error) => {
             aiShowFeedback(aiTaskBindingsFeedback, "danger", `保存失败: ${error.message}`, true);
+            aiShowFeedback(aiTaskBindingsFooterFeedback, "danger", `保存失败: ${error.message}`, true);
           })
           .finally(() => {
             aiSaveTaskBindingsBtn.disabled = false;
@@ -2416,11 +2583,35 @@
       aiProvidersModalEl.addEventListener("show.bs.modal", function () {
         aiRenderProvidersTable();
       });
+      aiProvidersModalEl.addEventListener("hidden.bs.modal", function () {
+        if (aiPendingProviderEditorRequest) {
+          const request = aiPendingProviderEditorRequest;
+          aiPendingProviderEditorRequest = null;
+          aiReturnToProvidersModal = !!request.reopenProviders;
+          aiPopulateProviderEditor(request.provider);
+          if (aiProviderEditorModal) {
+            aiProviderEditorModal.show();
+          }
+        }
+      });
     }
 
     if (aiTaskBindingsModalEl) {
       aiTaskBindingsModalEl.addEventListener("show.bs.modal", function () {
+        aiHideFeedback(aiTaskBindingsFeedback);
+        aiHideFeedback(aiTaskBindingsFooterFeedback);
         aiRenderTaskBindingsModal();
+      });
+    }
+
+    if (aiProviderEditorModalEl) {
+      aiProviderEditorModalEl.addEventListener("hidden.bs.modal", function () {
+        if (aiReturnToProvidersModal) {
+          aiReturnToProvidersModal = false;
+          if (aiProvidersModal) {
+            aiProvidersModal.show();
+          }
+        }
       });
     }
 
@@ -2920,6 +3111,135 @@
     line-height: 1.2;
   }
 
+  .ai-mgr-step-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 0.85rem;
+  }
+
+  .ai-mgr-step-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1 1 auto;
+    min-height: 72px;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 0.9rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+  }
+
+  .ai-mgr-step-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 999px;
+    background: #e0ecff;
+    color: #1d4ed8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .ai-mgr-step-actions {
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
+  .ai-mgr-modal-dialog {
+    width: min(94vw, 1180px);
+    max-width: min(94vw, 1180px);
+  }
+
+  .ai-mgr-modal-dialog-wide {
+    width: min(94vw, 1240px);
+    max-width: min(94vw, 1240px);
+  }
+
+  .ai-mgr-table-wrap {
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+  }
+
+  .ai-mgr-table {
+    min-width: 980px;
+    table-layout: auto;
+    margin-bottom: 0;
+  }
+
+  .ai-mgr-table th,
+  .ai-mgr-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+    padding: 0.7rem 0.75rem;
+  }
+
+  .ai-mgr-table th {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #475569;
+    background: rgba(248, 250, 252, 0.92);
+  }
+
+  .ai-mgr-table td {
+    font-size: 0.84rem;
+  }
+
+  .ai-mgr-provider-cell {
+    min-width: 150px;
+  }
+
+  .ai-mgr-status-stack {
+    min-width: 220px;
+  }
+
+  .ai-mgr-overview-section + .ai-mgr-overview-section {
+    margin-top: 1rem;
+  }
+
+  .ai-mgr-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+  }
+
+  .ai-mgr-ellipsis {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  .ai-mgr-ellipsis.name {
+    max-width: 180px;
+  }
+
+  .ai-mgr-ellipsis.url {
+    max-width: 270px;
+  }
+
+  .ai-mgr-ellipsis.key {
+    max-width: 210px;
+  }
+
+  .ai-mgr-ellipsis.status {
+    max-width: 240px;
+  }
+
+  .ai-mgr-ellipsis.model {
+    max-width: 280px;
+  }
+
+  .ai-mgr-ellipsis.protocol {
+    max-width: 140px;
+  }
+
   .ai-mgr-task-card {
     height: 100%;
     padding: 0.85rem;
@@ -3030,6 +3350,15 @@
       min-height: 84px;
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .ai-mgr-step-row {
+      flex-direction: column;
+    }
+
+    .ai-mgr-step-actions {
+      width: 100%;
+      justify-content: flex-start !important;
     }
 
     .ai-mgr-task-card,
