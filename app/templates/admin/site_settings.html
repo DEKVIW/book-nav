@@ -600,33 +600,22 @@
                         </div>
                       </div>
 
-                      <div class="ai-mgr-step-row mb-3">
-                        <div class="ai-mgr-step-card">
-                          <span class="ai-mgr-step-index">1</span>
-                          <div>
-                            <div class="fw-semibold small">先配置 AI 提供方</div>
-                            <div class="text-muted ai-mgr-switch-hint">
-                              至少先添加 1 个可用提供方，再执行自动模型选型和后续任务绑定。
-                            </div>
-                          </div>
-                        </div>
-                        <div class="d-flex flex-wrap gap-2 justify-content-end ai-mgr-step-actions">
-                          <button
-                            type="button"
-                            class="btn btn-outline-secondary btn-sm"
-                            data-bs-toggle="modal"
-                            data-bs-target="#aiProvidersModal"
-                          >
-                            <i class="bi bi-plug me-2"></i>提供方配置
-                          </button>
-                          <button
-                            type="button"
-                            id="aiMgrDetectAllBtn"
-                            class="btn btn-primary btn-sm"
-                          >
-                            <i class="bi bi-stars me-2"></i>自动模型选型
-                          </button>
-                        </div>
+                      <div class="ai-mgr-toolbar mb-3">
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiProvidersModal"
+                        >
+                          <i class="bi bi-plug me-2"></i>AI提供方配置
+                        </button>
+                        <button
+                          type="button"
+                          id="aiMgrDetectAllBtn"
+                          class="btn btn-primary btn-sm"
+                        >
+                          <i class="bi bi-stars me-2"></i>自动模型选型
+                        </button>
                       </div>
 
                       <div class="row g-2 mb-3">
@@ -662,49 +651,38 @@
 
                       <div id="aiMgrSummary" class="d-flex flex-wrap gap-2 mb-3"></div>
 
-                      <div class="ai-mgr-step-row mb-3">
-                        <div class="ai-mgr-step-card">
-                          <span class="ai-mgr-step-index">2</span>
-                          <div>
-                            <div class="fw-semibold small">再绑定任务模型并逐项测试</div>
-                            <div class="text-muted ai-mgr-switch-hint">
-                              查看当前生效配置，分别验证翻译、搜索、重排和补全是否跑通。
-                            </div>
-                          </div>
-                        </div>
-                        <div class="d-flex flex-wrap gap-2 justify-content-end ai-mgr-step-actions">
-                          <button
-                            type="button"
-                            class="btn btn-outline-primary btn-sm"
-                            data-bs-toggle="modal"
-                            data-bs-target="#aiTaskBindingsModal"
-                          >
-                            <i class="bi bi-diagram-3 me-2"></i>任务模型
-                          </button>
-                          <button
-                            type="button"
-                            class="btn btn-outline-secondary btn-sm"
-                            data-bs-toggle="modal"
-                            data-bs-target="#aiOverviewModal"
-                          >
-                            <i class="bi bi-eye me-2"></i>查看配置
-                          </button>
-                          <button
-                            type="button"
-                            class="btn btn-outline-secondary btn-sm"
-                            data-bs-toggle="modal"
-                            data-bs-target="#aiAdvancedSettingsModal"
-                          >
-                            <i class="bi bi-sliders me-2"></i>高级设置
-                          </button>
-                          <button
-                            type="button"
-                            id="aiMgrRunTaskTestsBtn"
-                            class="btn btn-outline-success btn-sm"
-                          >
-                            <i class="bi bi-activity me-2"></i>四项测试
-                          </button>
-                        </div>
+                      <div class="ai-mgr-toolbar mb-3">
+                        <button
+                          type="button"
+                          class="btn btn-outline-primary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiTaskBindingsModal"
+                        >
+                          <i class="bi bi-diagram-3 me-2"></i>任务模型
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiOverviewModal"
+                        >
+                          <i class="bi bi-eye me-2"></i>查看配置
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiAdvancedSettingsModal"
+                        >
+                          <i class="bi bi-sliders me-2"></i>高级设置
+                        </button>
+                        <button
+                          type="button"
+                          id="aiMgrRunTaskTestsBtn"
+                          class="btn btn-outline-success btn-sm"
+                        >
+                          <i class="bi bi-activity me-2"></i>四项测试
+                        </button>
                       </div>
 
                       <div id="aiMgrFeedback" class="d-none mb-3"></div>
@@ -719,7 +697,7 @@
                     aria-labelledby="aiProvidersModalLabel"
                     aria-hidden="true"
                   >
-                    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
+                    <div class="modal-dialog modal-dialog-centered modal-xl ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
                       <div class="modal-content">
                         <div class="modal-header">
                           <h5 class="modal-title" id="aiProvidersModalLabel">
@@ -853,7 +831,7 @@
                     aria-labelledby="aiTaskBindingsModalLabel"
                     aria-hidden="true"
                   >
-                    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
+                    <div class="modal-dialog modal-dialog-centered modal-xl ai-mgr-modal-dialog ai-mgr-modal-dialog-wide">
                       <div class="modal-content">
                         <div class="modal-header">
                           <h5 class="modal-title" id="aiTaskBindingsModalLabel">
@@ -1768,6 +1746,19 @@
     const aiProvidersModalEl = document.getElementById("aiProvidersModal");
     const aiTaskBindingsModalEl = document.getElementById("aiTaskBindingsModal");
     const aiOverviewModalEl = document.getElementById("aiOverviewModal");
+    const aiAdvancedSettingsModalEl = document.getElementById("aiAdvancedSettingsModal");
+
+    [
+      aiProviderEditorModalEl,
+      aiProvidersModalEl,
+      aiTaskBindingsModalEl,
+      aiOverviewModalEl,
+      aiAdvancedSettingsModalEl,
+    ].forEach((modalEl) => {
+      if (modalEl && modalEl.parentElement !== document.body) {
+        document.body.appendChild(modalEl);
+      }
+    });
 
     const aiProviderEditorModal = aiProviderEditorModalEl && window.bootstrap
       ? bootstrap.Modal.getOrCreateInstance(aiProviderEditorModalEl)
@@ -2026,7 +2017,7 @@
               </td>
               <td class="text-center">${aiEscapeHtml(String(provider.priority || 100))}</td>
               <td class="text-end">
-                <div class="ai-mgr-action-group justify-content-end">
+                <div class="ai-mgr-action-group ai-mgr-action-group-end">
                   <button type="button" class="btn btn-outline-secondary btn-sm" data-action="edit" data-provider-id="${provider.id}">编辑</button>
                   <button type="button" class="btn btn-outline-primary btn-sm" data-action="detect" data-provider-id="${provider.id}">检测</button>
                   <button type="button" class="btn btn-outline-success btn-sm" data-action="test" data-provider-id="${provider.id}">测试</button>
@@ -3149,14 +3140,36 @@
     align-items: center;
   }
 
+  .ai-mgr-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+    align-items: center;
+  }
+
   .ai-mgr-modal-dialog {
     width: min(94vw, 1180px);
-    max-width: min(94vw, 1180px);
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .ai-mgr-modal-dialog-wide {
     width: min(94vw, 1240px);
     max-width: min(94vw, 1240px);
+  }
+
+  .ai-mgr-modal-dialog .modal-content,
+  #aiProviderEditorModal .modal-content,
+  #aiAdvancedSettingsModal .modal-content {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    max-height: calc(100vh - 3.5rem);
+  }
+
+  .ai-mgr-modal-dialog .modal-body {
+    overflow-y: auto;
   }
 
   .ai-mgr-table-wrap {
@@ -3205,6 +3218,10 @@
     align-items: center;
     gap: 0.4rem;
     flex-wrap: nowrap;
+  }
+
+  .ai-mgr-action-group-end {
+    justify-content: flex-end;
   }
 
   .ai-mgr-ellipsis {
