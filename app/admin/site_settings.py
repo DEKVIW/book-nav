@@ -19,10 +19,12 @@ from app.utils.ai_model_discovery import (
     summarize_probe_catalog,
 )
 from app.utils.ai_search import (
+    AI_INTERFACE_MODE_AUTO,
     AISearchService,
     AICompatibilityError,
     AIEmptyResponseError,
     AIJSONParseError,
+    get_ai_interface_mode,
     get_ai_model_for_task,
 )
 
@@ -30,23 +32,24 @@ from app.utils.ai_search import (
 def _format_ai_structured_output_error(error: Exception) -> str:
     if isinstance(error, AIEmptyResponseError):
         reason = f"接口已连通，但模型返回了空内容或非直接文本内容：{str(error)}"
-        suggestion = "请优先选择会直接输出文本内容的聊天模型，并关闭工具调用/仅推理模式。"
+        suggestion = "请优先选择会直接输出文本内容的聊天模型，并关闭工具调用/仅推理模式；必要时可切换接口模式为自动兜底。"
     elif isinstance(error, AIJSONParseError):
         reason = f"接口已连通，但结构化 JSON 输出解析失败：{str(error)}"
-        suggestion = "请使用能稳定输出 JSON 的聊天模型，或更换兼容性更好的 OpenAI 兼容接口。"
+        suggestion = "请使用能稳定输出 JSON 的聊天模型，或切换接口模式为自动兜底/Responses。"
     elif isinstance(error, AICompatibilityError):
         reason = f"接口已连通，但返回格式与当前项目不兼容：{str(error)}"
-        suggestion = "请确保 /v1/chat/completions 返回标准文本内容，并避免返回 tool_calls 作为最终结果。"
+        suggestion = "请确保当前接口模式返回标准文本内容，并避免返回 tool_calls 作为最终结果。"
     else:
         reason = f"接口已连通，但结构化功能测试失败：{str(error)}"
         suggestion = "请检查当前模型是否适合稳定文本/JSON 输出。"
     return f"❌ AI 接口连通成功，但项目结构化功能测试失败\n原因：{reason}\n建议：{suggestion}"
 
 
-def _resolve_ai_request_config(data: dict, settings: SiteSettings) -> tuple[str, str, str]:
+def _resolve_ai_request_config(data: dict, settings: SiteSettings) -> tuple[str, str, str, str]:
     api_base_url = (data.get('api_base_url') or '').strip()
     api_key_input = (data.get('api_key') or '').strip()
     model_name = (data.get('model_name') or '').strip()
+    interface_mode = (data.get('interface_mode') or '').strip().lower()
 
     if not api_base_url:
         api_base_url = (settings.ai_api_base_url or '').strip()
@@ -62,7 +65,12 @@ def _resolve_ai_request_config(data: dict, settings: SiteSettings) -> tuple[str,
             or (settings.ai_model_name or '').strip()
         )
 
-    return api_base_url, api_key, model_name
+    if not interface_mode:
+        interface_mode = get_ai_interface_mode(settings)
+    elif interface_mode not in {'auto', 'chat', 'responses'}:
+        interface_mode = AI_INTERFACE_MODE_AUTO
+
+    return api_base_url, api_key, model_name, interface_mode
 
 
 def _parse_probe_datetime(value: str) -> Optional[datetime]:
@@ -97,6 +105,7 @@ def _build_ai_probe_state(settings: SiteSettings) -> dict:
     current_signature = compute_ai_probe_signature(
         settings.ai_api_base_url or '',
         settings.ai_api_key or '',
+        get_ai_interface_mode(settings),
     )
     stored_signature = (settings.ai_model_probe_signature or '').strip()
     probe_stale = bool(
@@ -111,6 +120,7 @@ def _build_ai_probe_state(settings: SiteSettings) -> dict:
     return {
         'auto_enabled': bool(getattr(settings, 'ai_auto_model_selection_enabled', True)),
         'manual_model_name': (settings.ai_model_name or '').strip(),
+        'interface_mode': get_ai_interface_mode(settings),
         'selected_models': {
             key: (value or '')
             for key, value in settings.get_ai_selected_models().items()
@@ -255,6 +265,7 @@ def site_settings():
             if api_key_input and not is_masked:
                 settings.ai_api_key = api_key_input
             settings.ai_model_name = form.ai_model_name.data
+            settings.ai_interface_mode = (form.ai_interface_mode.data or AI_INTERFACE_MODE_AUTO).strip().lower()
             settings.ai_auto_model_selection_enabled = bool(request.form.get('ai_auto_model_selection_enabled'))
             try:
                 settings.ai_temperature = float(form.ai_temperature.data) if form.ai_temperature.data else 0.7
@@ -265,6 +276,7 @@ def site_settings():
             probe_signature = compute_ai_probe_signature(
                 settings.ai_api_base_url or '',
                 settings.ai_api_key or '',
+                get_ai_interface_mode(settings),
             )
             submitted_probe_signature = (request.form.get('ai_model_probe_signature') or '').strip()
             submitted_probe_error = (request.form.get('ai_model_probe_error') or '').strip()
@@ -375,73 +387,43 @@ def test_ai_config():
     try:
         data = request.get_json(silent=True) or {}
         settings = SiteSettings.get_settings()
-        api_base_url, api_key, model_name = _resolve_ai_request_config(data, settings)
+        api_base_url, api_key, model_name, interface_mode = _resolve_ai_request_config(data, settings)
         
         if not all([api_base_url, api_key, model_name]):
             return jsonify({
                 'success': False,
                 'message': '请填写完整的 API 基础URL、API 密钥，或先完成模型检测'
             }), 400
-        
-        # 先进行简单的API连接测试，获取详细的错误信息
-        import requests
+
         from app.utils.api_error_handler import classify_api_error, format_error_for_display
-        
-        test_url = f"{api_base_url.rstrip('/')}/v1/chat/completions"
-        test_headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        test_data = {
-            "model": model_name,
-            "messages": [{"role": "user", "content": "test"}],
-            "max_tokens": 5
-        }
-        
-        # 执行测试请求以获取详细错误信息
+
         try:
-            test_response = requests.post(test_url, json=test_data, headers=test_headers, timeout=10)
-            test_response.raise_for_status()
-        except requests.exceptions.RequestException as test_error:
-            # 测试请求失败，使用错误处理工具类解析详细错误
-            response = None
-            if hasattr(test_error, 'response') and test_error.response is not None:
-                response = test_error.response
-            
-            error_info = classify_api_error(
-                exception=test_error,
-                api_type='ai',
-                api_base_url=api_base_url,
-                model_name=model_name,
-                api_key=api_key,
-                response=response
-            )
-            
-            current_app.logger.error(f"AI配置测试失败: {str(test_error)}")
-            return jsonify({
-                'success': False,
-                'message': format_error_for_display(error_info)
-            }), 400
-        
-        # 测试请求成功，继续使用AISearchService进行完整测试（验证功能完整性）
-        try:
+            transport_result = None
             ai_service = AISearchService(
                 api_base_url=api_base_url,
                 api_key=api_key,
-                model_name=model_name
+                model_name=model_name,
+                interface_mode=interface_mode,
             )
-            
-            # 执行简单的测试查询
+
+            transport_result = ai_service.probe_text_output()
             test_result = ai_service.analyze_search_intent("测试")
             
             return jsonify({
                 'success': True,
-                'message': f'AI配置测试成功，模型 {model_name} 接口连通且结构化输出正常',
+                'message': (
+                    f'AI配置测试成功，模型 {model_name} 接口连通且结构化输出正常'
+                    f'（当前使用 {ai_service.last_protocol_used or interface_mode}）'
+                ),
                 'result': test_result,
                 'details': {
                     'transport_ok': True,
                     'structured_output_ok': True,
-                    'tested_model': model_name
+                    'tested_model': model_name,
+                    'interface_mode': interface_mode,
+                    'transport_protocol': transport_result.get('protocol', ''),
+                    'structured_protocol': ai_service.last_protocol_used or '',
+                    'attempts': ai_service.last_attempt_trace,
                 }
             })
         except (AIEmptyResponseError, AIJSONParseError, AICompatibilityError) as e:
@@ -450,13 +432,14 @@ def test_ai_config():
                 'success': False,
                 'message': _format_ai_structured_output_error(e),
                 'details': {
-                    'transport_ok': True,
+                    'transport_ok': bool(transport_result),
                     'structured_output_ok': False,
-                    'error_type': type(e).__name__
+                    'error_type': type(e).__name__,
+                    'interface_mode': interface_mode,
+                    'attempts': getattr(locals().get('ai_service'), 'last_attempt_trace', []),
                 }
             }), 400
         except Exception as e:
-            # AISearchService调用失败（这种情况应该很少，因为前面测试已通过）
             current_app.logger.error(f"AI服务调用失败: {str(e)}")
             
             error_info = classify_api_error(
@@ -502,7 +485,7 @@ def detect_ai_models():
     try:
         data = request.get_json(silent=True) or {}
         settings = SiteSettings.get_settings()
-        api_base_url, api_key, model_name = _resolve_ai_request_config(data, settings)
+        api_base_url, api_key, model_name, interface_mode = _resolve_ai_request_config(data, settings)
 
         if not all([api_base_url, api_key]):
             return jsonify({
@@ -514,11 +497,13 @@ def detect_ai_models():
             api_base_url=api_base_url,
             api_key=api_key,
             preferred_model=model_name,
+            interface_mode=interface_mode,
         )
 
         probe_state = {
             'auto_enabled': bool(data.get('auto_enabled', True)),
             'manual_model_name': model_name,
+            'interface_mode': interface_mode,
             'selected_models': discovery['selected_models'],
             'catalog': discovery['catalog'],
             'stats': discovery['stats'],
@@ -535,6 +520,7 @@ def detect_ai_models():
                 f"模型检测完成：共发现 {stats['total_models']} 个模型，"
                 f"其中 {stats['compatible_models']} 个适合当前项目，"
                 f"{stats['partial_models']} 个可部分兼容。"
+                f" 当前接口模式：{interface_mode}。"
             ),
             'probe_state': probe_state
         })

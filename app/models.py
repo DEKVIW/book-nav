@@ -340,6 +340,7 @@ class SiteSettings(db.Model):
     ai_api_base_url = db.Column(db.String(512), nullable=True)  # AI API基础URL
     ai_api_key = db.Column(db.String(512), nullable=True)  # AI API密钥（加密存储）
     ai_model_name = db.Column(db.String(128), nullable=True)  # AI模型名称
+    ai_interface_mode = db.Column(db.String(32), default='auto')  # AI接口模式：auto, chat, responses
     ai_temperature = db.Column(db.Float, default=0.7)  # AI温度参数
     ai_max_tokens = db.Column(db.Integer, default=500)  # AI最大token数
     ai_auto_model_selection_enabled = db.Column(db.Boolean, default=True)  # 是否自动按任务选择模型

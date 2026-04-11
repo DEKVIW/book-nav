@@ -12,7 +12,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from app.utils.ai_search import AISearchService, AIEmptyResponseError
+from app.utils.ai_search import (
+    AIEmptyResponseError,
+    AISearchService,
+)
 
 NON_CHAT_MODEL_MARKERS = (
     "embedding",
@@ -36,13 +39,20 @@ LOW_PRIORITY_MODEL_MARKERS = (
 )
 
 
-def compute_ai_probe_signature(api_base_url: str, api_key: str) -> Optional[str]:
+def compute_ai_probe_signature(
+    api_base_url: str,
+    api_key: str,
+    interface_mode: str = "auto",
+) -> Optional[str]:
     base_url = (api_base_url or "").strip().rstrip("/")
     api_key = (api_key or "").strip()
+    interface_mode = (interface_mode or "auto").strip().lower()
     if not base_url or not api_key:
         return None
 
-    digest = hashlib.sha256(f"{base_url}|{api_key}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(
+        f"{base_url}|{api_key}|{interface_mode}".encode("utf-8")
+    ).hexdigest()
     return digest
 
 
@@ -142,6 +152,7 @@ def probe_model_capabilities(
     api_base_url: str,
     api_key: str,
     model_info: dict,
+    interface_mode: str = "auto",
 ) -> dict:
     result = dict(model_info)
     result.update(
@@ -149,6 +160,8 @@ def probe_model_capabilities(
             "supports_text": False,
             "supports_json": False,
             "supports_json_mode": False,
+            "text_protocol": "",
+            "json_protocol": "",
             "text_preview": "",
             "json_preview": "",
             "text_error": "",
@@ -173,6 +186,7 @@ def probe_model_capabilities(
         api_base_url=api_base_url,
         api_key=api_key,
         model_name=model_info["id"],
+        interface_mode=interface_mode,
         temperature=0.2,
         max_tokens=256,
     )
@@ -181,6 +195,7 @@ def probe_model_capabilities(
     try:
         text_preview = _probe_text_output(service)
         result["supports_text"] = True
+        result["text_protocol"] = service.last_protocol_used or ""
         result["text_preview"] = text_preview[:120]
         latencies.append(int((time.perf_counter() - text_started) * 1000))
     except Exception as exc:
@@ -191,6 +206,7 @@ def probe_model_capabilities(
         json_preview = _probe_json_output(service)
         result["supports_json"] = True
         result["supports_json_mode"] = bool(service._json_object_response_format_supported)
+        result["json_protocol"] = service.last_protocol_used or ""
         result["json_preview"] = (
             f'intent={json_preview.get("intent", "")}; '
             f'keywords={",".join(json_preview.get("keywords", [])[:3])}'
@@ -263,6 +279,19 @@ def _score_model_for_task(model: dict, task: str, preferred_model: str = "") -> 
     if model.get("supports_json_mode"):
         score += 8
 
+    preferred_protocol = ""
+    if task == "translate":
+        preferred_protocol = (model.get("text_protocol") or "").strip().lower()
+    elif task in {"intent", "rerank", "site_info"}:
+        preferred_protocol = (model.get("json_protocol") or "").strip().lower()
+
+    protocol_bonus = {
+        "chat": 6,
+        "responses": 4,
+        "chat_stream": 2,
+    }
+    score += protocol_bonus.get(preferred_protocol, 0)
+
     if preferred_model and model.get("id") == preferred_model:
         score += 10
 
@@ -325,6 +354,7 @@ def discover_and_probe_models(
     api_base_url: str,
     api_key: str,
     preferred_model: str = "",
+    interface_mode: str = "auto",
     max_workers: int = 4,
 ) -> dict:
     catalog = list_provider_models(api_base_url, api_key)
@@ -333,7 +363,13 @@ def discover_and_probe_models(
 
     with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(candidates) or 1))) as executor:
         future_map = {
-            executor.submit(probe_model_capabilities, api_base_url, api_key, item): item["id"]
+            executor.submit(
+                probe_model_capabilities,
+                api_base_url,
+                api_key,
+                item,
+                interface_mode,
+            ): item["id"]
             for item in candidates
         }
 
@@ -350,6 +386,8 @@ def discover_and_probe_models(
                     "supports_text": False,
                     "supports_json": False,
                     "supports_json_mode": False,
+                    "text_protocol": "",
+                    "json_protocol": "",
                     "text_preview": "",
                     "json_preview": "",
                     "text_error": _format_probe_error(exc),
@@ -372,6 +410,8 @@ def discover_and_probe_models(
             "supports_text": False,
             "supports_json": False,
             "supports_json_mode": False,
+            "text_protocol": "",
+            "json_protocol": "",
             "text_preview": "",
             "json_preview": "",
             "text_error": "",
@@ -392,5 +432,10 @@ def discover_and_probe_models(
         "selected_models": select_task_models(merged_catalog, preferred_model=preferred_model),
         "stats": summarize_probe_catalog(merged_catalog),
         "probe_last_at": datetime.utcnow().isoformat(),
-        "probe_signature": compute_ai_probe_signature(api_base_url, api_key),
+        "probe_signature": compute_ai_probe_signature(
+            api_base_url,
+            api_key,
+            interface_mode=interface_mode,
+        ),
+        "interface_mode": (interface_mode or "auto"),
     }

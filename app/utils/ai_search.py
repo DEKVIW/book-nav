@@ -84,18 +84,31 @@ AI_TASK_MODEL_FIELDS = {
     "site_info": "ai_selected_site_info_model",
 }
 
+AI_INTERFACE_MODE_AUTO = "auto"
+AI_INTERFACE_MODE_CHAT = "chat"
+AI_INTERFACE_MODE_RESPONSES = "responses"
+AI_INTERFACE_MODE_VALUES = {
+    AI_INTERFACE_MODE_AUTO,
+    AI_INTERFACE_MODE_CHAT,
+    AI_INTERFACE_MODE_RESPONSES,
+}
+
 
 class AISearchService:
     """AI 搜索服务类"""
     
     def __init__(self, api_base_url: str, api_key: str, model_name: str,
-                 temperature: float = 0.7, max_tokens: int = 500):
+                 temperature: float = 0.7, max_tokens: int = 500,
+                 interface_mode: str = AI_INTERFACE_MODE_AUTO):
         self.api_base_url = api_base_url.rstrip('/')
         self.api_key = api_key
         self.model_name = model_name
         self.temperature = float(temperature) if temperature is not None else 0.7
         self.max_tokens = max_tokens if max_tokens is not None else 500
+        self.interface_mode = self._normalize_interface_mode(interface_mode)
         self._json_object_response_format_supported: Optional[bool] = None
+        self.last_protocol_used: str = ""
+        self.last_attempt_trace: List[Dict[str, str]] = []
 
     def _call_api(self, messages: List[dict], temperature: float = None,
                   max_tokens: int = None, expect_json: bool = False) -> dict:
@@ -111,13 +124,168 @@ class AISearchService:
             data["response_format"] = {"type": "json_object"}
             allow_json_mode_fallback = True
 
-        return self._post_chat_completion(
-            data,
-            allow_json_mode_fallback=allow_json_mode_fallback
+        self.last_protocol_used = ""
+        self.last_attempt_trace = []
+
+        attempts = self._build_request_attempts(
+            messages=messages,
+            chat_data=data,
+            allow_json_mode_fallback=allow_json_mode_fallback,
         )
 
+        last_error: Optional[Exception] = None
+        for attempt_name, attempt_func in attempts:
+            try:
+                payload = attempt_func()
+                response_text = self._extract_response_text(payload)
+                if not response_text:
+                    raise AIEmptyResponseError("AI API 返回了空文本内容")
+                if expect_json:
+                    self._parse_json_response(response_text)
+
+                self.last_protocol_used = attempt_name
+                self.last_attempt_trace.append({
+                    "protocol": attempt_name,
+                    "status": "success",
+                })
+                return payload
+            except Exception as exc:
+                last_error = exc
+                self.last_attempt_trace.append({
+                    "protocol": attempt_name,
+                    "status": "failed",
+                    "error": str(exc),
+                })
+                if self._should_try_next_attempt(exc):
+                    current_app.logger.warning(
+                        "AI request via %s failed for model %s, falling back: %s",
+                        attempt_name,
+                        self.model_name,
+                        str(exc),
+                    )
+                    continue
+                raise self._normalize_api_exception(exc)
+
+        if last_error is not None:
+            raise self._normalize_api_exception(last_error)
+        raise AIServiceError("AI 请求失败：没有可用的接口模式")
+
+    def _build_request_attempts(
+        self,
+        messages: List[dict],
+        chat_data: Dict[str, Any],
+        allow_json_mode_fallback: bool = False,
+    ) -> List[Tuple[str, Any]]:
+        responses_data = self._build_responses_request(messages, chat_data)
+        attempts: List[Tuple[str, Any]] = []
+
+        if self.interface_mode == AI_INTERFACE_MODE_CHAT:
+            attempts.extend([
+                (
+                    "chat",
+                    lambda: self._post_chat_completion(
+                        chat_data,
+                        allow_json_mode_fallback=allow_json_mode_fallback,
+                    ),
+                ),
+                (
+                    "chat_stream",
+                    lambda: self._stream_chat_completion(
+                        chat_data,
+                    ),
+                ),
+            ])
+        elif self.interface_mode == AI_INTERFACE_MODE_RESPONSES:
+            attempts.append((
+                "responses",
+                lambda: self._post_responses(
+                    responses_data,
+                    fallback_prompt=self._flatten_messages_as_prompt(messages),
+                ),
+            ))
+        else:
+            attempts.extend([
+                (
+                    "chat",
+                    lambda: self._post_chat_completion(
+                        chat_data,
+                        allow_json_mode_fallback=allow_json_mode_fallback,
+                    ),
+                ),
+                (
+                    "chat_stream",
+                    lambda: self._stream_chat_completion(
+                        chat_data,
+                    ),
+                ),
+                (
+                    "responses",
+                    lambda: self._post_responses(
+                        responses_data,
+                        fallback_prompt=self._flatten_messages_as_prompt(messages),
+                    ),
+                ),
+            ])
+
+        return attempts
+
+    def _normalize_interface_mode(self, interface_mode: Optional[str]) -> str:
+        value = (interface_mode or "").strip().lower()
+        if value not in AI_INTERFACE_MODE_VALUES:
+            return AI_INTERFACE_MODE_AUTO
+        return value
+
+    def _normalize_api_exception(self, error: Exception) -> Exception:
+        if isinstance(error, AIServiceError):
+            return error
+        if isinstance(error, requests.exceptions.Timeout):
+            return Exception("AI API 调用超时，请稍后重试")
+        if isinstance(error, requests.exceptions.HTTPError):
+            return Exception(f"AI API 调用失败: {str(error)}")
+        if isinstance(error, requests.exceptions.RequestException):
+            return Exception(f"AI API 调用失败: {str(error)}")
+        if isinstance(error, ValueError):
+            return AICompatibilityError(f"AI API 返回的不是有效 JSON：{str(error)}")
+        return Exception(f"AI API 处理错误: {str(error)}")
+
+    def _should_try_next_attempt(self, error: Exception) -> bool:
+        if isinstance(error, (AICompatibilityError, AIEmptyResponseError, AIJSONParseError)):
+            return True
+        if isinstance(error, requests.exceptions.HTTPError):
+            return self._is_retryable_http_error(error.response)
+        return False
+
+    def _is_retryable_http_error(
+        self,
+        response: Optional[requests.Response]
+    ) -> bool:
+        if response is None:
+            return False
+
+        if response.status_code in (400, 404, 405, 415, 422, 501):
+            return True
+
+        error_text = (response.text or "").lower()
+        retryable_markers = [
+            "unsupported",
+            "not support",
+            "unknown field",
+            "invalid parameter",
+            "unrecognized request argument",
+            "extra inputs are not permitted",
+            "chat/completions",
+            "responses",
+            "response_format",
+            "json_object",
+            "stream",
+            "input_text",
+            "max_output_tokens",
+        ]
+        return any(marker in error_text for marker in retryable_markers)
+
     def _post_chat_completion(self, data: Dict[str, Any],
-                              allow_json_mode_fallback: bool = False) -> dict:
+                              allow_json_mode_fallback: bool = False,
+                              allow_temperature_fallback: bool = True) -> dict:
         url = f"{self.api_base_url}/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -144,17 +312,277 @@ class AISearchService:
                     fallback_data,
                     allow_json_mode_fallback=False
                 )
-            raise Exception(f"AI API 调用失败: {str(e)}")
-        except requests.exceptions.Timeout:
-            raise Exception("AI API 调用超时，请稍后重试")
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"AI API 调用失败: {str(e)}")
-        except ValueError as e:
-            raise AICompatibilityError(f"AI API 返回的不是有效 JSON：{str(e)}")
-        except AIServiceError:
+            if allow_temperature_fallback and "temperature" in data and self._should_retry_without_temperature(response):
+                current_app.logger.warning(
+                    "AI provider rejected temperature for chat/completions; retrying without it"
+                )
+                fallback_data = data.copy()
+                fallback_data.pop("temperature", None)
+                return self._post_chat_completion(
+                    fallback_data,
+                    allow_json_mode_fallback=allow_json_mode_fallback,
+                    allow_temperature_fallback=False,
+                )
             raise
-        except Exception as e:
-            raise Exception(f"AI API 处理错误: {str(e)}")
+
+        return {}
+
+    def _stream_chat_completion(self, data: Dict[str, Any]) -> dict:
+        url = f"{self.api_base_url}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        stream_data = dict(data)
+        stream_data.pop("response_format", None)
+        stream_data["stream"] = True
+
+        response = requests.post(
+            url,
+            json=stream_data,
+            headers=headers,
+            timeout=30,
+            stream=True,
+        )
+        response.raise_for_status()
+
+        text_parts: List[str] = []
+        has_event_payload = False
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if raw_line is None:
+                continue
+            line = raw_line.strip()
+            if not line or line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                continue
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if not line:
+                continue
+            if line == "[DONE]":
+                break
+
+            try:
+                payload = json.loads(line)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+
+            has_event_payload = True
+            text_parts.extend(self._extract_chat_stream_text_parts(payload))
+
+        aggregated_text = "".join(text_parts).strip()
+        if aggregated_text:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": aggregated_text
+                        }
+                    }
+                ]
+            }
+
+        if has_event_payload:
+            raise AIEmptyResponseError("Chat 流式返回成功，但未拼接出可用文本内容")
+        raise AICompatibilityError("Chat 流式返回格式异常，未收到可解析的事件数据")
+
+    def _build_responses_request(
+        self,
+        messages: List[dict],
+        chat_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        instructions: List[str] = []
+        input_items: List[dict] = []
+
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+
+            role = (message.get("role") or "user").strip().lower()
+            text = self._coerce_content_to_text(message.get("content")).strip()
+            if not text:
+                continue
+
+            if role == "system":
+                instructions.append(text)
+                continue
+
+            response_role = "assistant" if role == "assistant" else "user"
+            input_items.append({
+                "role": response_role,
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": text,
+                    }
+                ]
+            })
+
+        data: Dict[str, Any] = {
+            "model": self.model_name,
+            "input": input_items or self._flatten_messages_as_prompt(messages),
+            "max_output_tokens": chat_data.get("max_tokens", self.max_tokens),
+        }
+
+        temperature = chat_data.get("temperature")
+        if temperature is not None:
+            data["temperature"] = temperature
+
+        if instructions:
+            data["instructions"] = "\n\n".join(instructions)
+
+        return data
+
+    def _post_responses(
+        self,
+        data: Dict[str, Any],
+        fallback_prompt: str = "",
+        allow_prompt_fallback: bool = True,
+        allow_instructions_fallback: bool = True,
+        allow_temperature_fallback: bool = True,
+        allow_legacy_max_tokens_fallback: bool = True,
+    ) -> dict:
+        url = f"{self.api_base_url}/v1/responses"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        try:
+            response = requests.post(url, json=data, headers=headers, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            response = e.response
+            if (
+                allow_instructions_fallback
+                and "instructions" in data
+                and self._should_retry_without_instructions(response)
+            ):
+                fallback_data = dict(data)
+                fallback_data.pop("instructions", None)
+                return self._post_responses(
+                    fallback_data,
+                    fallback_prompt=fallback_prompt,
+                    allow_prompt_fallback=allow_prompt_fallback,
+                    allow_instructions_fallback=False,
+                    allow_temperature_fallback=allow_temperature_fallback,
+                    allow_legacy_max_tokens_fallback=allow_legacy_max_tokens_fallback,
+                )
+            if (
+                allow_temperature_fallback
+                and "temperature" in data
+                and self._should_retry_without_temperature(response)
+            ):
+                fallback_data = dict(data)
+                fallback_data.pop("temperature", None)
+                return self._post_responses(
+                    fallback_data,
+                    fallback_prompt=fallback_prompt,
+                    allow_prompt_fallback=allow_prompt_fallback,
+                    allow_instructions_fallback=allow_instructions_fallback,
+                    allow_temperature_fallback=False,
+                    allow_legacy_max_tokens_fallback=allow_legacy_max_tokens_fallback,
+                )
+            if (
+                allow_legacy_max_tokens_fallback
+                and "max_output_tokens" in data
+                and self._should_retry_responses_with_legacy_max_tokens(response)
+            ):
+                fallback_data = dict(data)
+                fallback_data["max_tokens"] = fallback_data.pop("max_output_tokens")
+                return self._post_responses(
+                    fallback_data,
+                    fallback_prompt=fallback_prompt,
+                    allow_prompt_fallback=allow_prompt_fallback,
+                    allow_instructions_fallback=allow_instructions_fallback,
+                    allow_temperature_fallback=allow_temperature_fallback,
+                    allow_legacy_max_tokens_fallback=False,
+                )
+            if (
+                allow_prompt_fallback
+                and fallback_prompt
+                and self._should_retry_responses_with_flat_prompt(response)
+            ):
+                fallback_data = dict(data)
+                fallback_data["input"] = fallback_prompt
+                return self._post_responses(
+                    fallback_data,
+                    fallback_prompt="",
+                    allow_prompt_fallback=False,
+                    allow_instructions_fallback=allow_instructions_fallback,
+                    allow_temperature_fallback=allow_temperature_fallback,
+                    allow_legacy_max_tokens_fallback=allow_legacy_max_tokens_fallback,
+                )
+            raise
+
+    def _extract_chat_stream_text_parts(self, payload: Dict[str, Any]) -> List[str]:
+        parts: List[str] = []
+        choices = payload.get("choices")
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                delta = choice.get("delta")
+                if delta is not None:
+                    part = self._coerce_stream_content_to_text(delta)
+                    if part:
+                        parts.append(part)
+                message = choice.get("message")
+                if message is not None:
+                    part = self._coerce_stream_content_to_text(message)
+                    if part:
+                        parts.append(part)
+                text = self._coerce_stream_content_to_text(choice.get("text"))
+                if text:
+                    parts.append(text)
+
+        output_text = self._coerce_stream_content_to_text(payload.get("output_text"))
+        if output_text:
+            parts.append(output_text)
+
+        return parts
+
+    def _coerce_stream_content_to_text(self, content: Any) -> str:
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, (int, float, bool)):
+            return str(content)
+        if isinstance(content, list):
+            return "".join(
+                part for part in (
+                    self._coerce_stream_content_to_text(item)
+                    for item in content
+                ) if part
+            )
+        if isinstance(content, dict):
+            for key in ("text", "content", "delta", "output_text", "value"):
+                if key in content:
+                    text = self._coerce_stream_content_to_text(content.get(key))
+                    if text:
+                        return text
+            return ""
+        return ""
+
+    def _flatten_messages_as_prompt(self, messages: List[dict]) -> str:
+        segments: List[str] = []
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            role = (message.get("role") or "user").strip().lower()
+            text = self._coerce_content_to_text(message.get("content")).strip()
+            if not text:
+                continue
+            role_label = {
+                "system": "System",
+                "assistant": "Assistant",
+                "user": "User",
+            }.get(role, "User")
+            segments.append(f"{role_label}: {text}")
+        return "\n\n".join(segments)
 
     def _should_retry_without_json_mode(
         self,
@@ -178,6 +606,85 @@ class AISearchService:
         ]
         return any(marker in error_text for marker in unsupported_markers)
 
+    def _should_retry_without_temperature(
+        self,
+        response: Optional[requests.Response]
+    ) -> bool:
+        if response is None or response.status_code not in (400, 404, 415, 422):
+            return False
+
+        error_text = (response.text or "").lower()
+        generic_markers = [
+            "unsupported",
+            "not support",
+            "unknown field",
+            "invalid parameter",
+            "unrecognized request argument",
+            "extra inputs are not permitted",
+        ]
+        return "temperature" in error_text and any(
+            marker in error_text for marker in generic_markers
+        )
+
+    def _should_retry_without_instructions(
+        self,
+        response: Optional[requests.Response]
+    ) -> bool:
+        if response is None or response.status_code not in (400, 404, 415, 422):
+            return False
+
+        error_text = (response.text or "").lower()
+        generic_markers = [
+            "unsupported",
+            "not support",
+            "unknown field",
+            "invalid parameter",
+            "unrecognized request argument",
+            "extra inputs are not permitted",
+        ]
+        return "instructions" in error_text and any(
+            marker in error_text for marker in generic_markers
+        )
+
+    def _should_retry_responses_with_flat_prompt(
+        self,
+        response: Optional[requests.Response]
+    ) -> bool:
+        if response is None or response.status_code not in (400, 404, 415, 422):
+            return False
+
+        error_text = (response.text or "").lower()
+        unsupported_markers = [
+            "input_text",
+            "content",
+            "expected a string",
+            "invalid type",
+            "messages",
+            "unsupported",
+            "not support",
+            "extra inputs are not permitted",
+        ]
+        return any(marker in error_text for marker in unsupported_markers)
+
+    def _should_retry_responses_with_legacy_max_tokens(
+        self,
+        response: Optional[requests.Response]
+    ) -> bool:
+        if response is None or response.status_code not in (400, 404, 415, 422):
+            return False
+
+        error_text = (response.text or "").lower()
+        generic_markers = [
+            "unsupported",
+            "not support",
+            "unknown field",
+            "invalid parameter",
+            "unrecognized request argument",
+        ]
+        return "max_output_tokens" in error_text and any(
+            marker in error_text for marker in generic_markers
+        )
+
     def _extract_response_text(self, response: Dict[str, Any]) -> str:
         if not isinstance(response, dict):
             raise AICompatibilityError("AI API 返回格式异常，响应不是 JSON 对象")
@@ -199,6 +706,14 @@ class AISearchService:
         output_text = self._coerce_content_to_text(response.get("output"))
         if output_text:
             return output_text
+
+        content_text = self._coerce_content_to_text(response.get("content"))
+        if content_text:
+            return content_text
+
+        candidates_text = self._extract_candidates_text(response.get("candidates"))
+        if candidates_text:
+            return candidates_text
 
         if issues:
             raise AIEmptyResponseError("；".join(issues[:3]))
@@ -265,7 +780,7 @@ class AISearchService:
 
         if isinstance(content, dict):
             parts = []
-            for key in ("text", "value", "content", "output_text"):
+            for key in ("text", "value", "content", "output_text", "parts", "message", "output"):
                 if key in content:
                     part = self._coerce_content_to_text(content.get(key))
                     if part:
@@ -273,6 +788,20 @@ class AISearchService:
             return "\n".join(parts).strip()
 
         return ""
+
+    def _extract_candidates_text(self, candidates: Any) -> str:
+        if not isinstance(candidates, list):
+            return ""
+
+        parts = []
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            part = self._coerce_content_to_text(candidate.get("content"))
+            if part:
+                parts.append(part)
+
+        return "\n".join(parts).strip()
 
     def _parse_json_response(self, content: Any) -> Any:
         text = self._coerce_content_to_text(content)
@@ -531,6 +1060,27 @@ class AISearchService:
             return text
         return text[:limit] + "..."
 
+    def probe_text_output(self) -> dict:
+        messages = [
+            {
+                "role": "system",
+                "content": "你是简洁的助手。"
+            },
+            {
+                "role": "user",
+                "content": "请只回复：test"
+            }
+        ]
+        response = self._call_api(messages, temperature=0, max_tokens=32)
+        text = self._cleanup_plain_text(self._extract_response_text(response))
+        if not text:
+            raise AIEmptyResponseError("模型没有返回可用文本")
+        return {
+            "text": text,
+            "protocol": self.last_protocol_used or "",
+            "attempts": list(self.last_attempt_trace),
+        }
+
     def analyze_search_intent(self, user_query: str) -> dict:
         prompt = AI_SEARCH_PROMPT_TEMPLATE.format(user_query=user_query)
         messages = [
@@ -732,6 +1282,13 @@ def get_ai_temperature_for_task(settings, task: Optional[str] = None) -> float:
     return temperature
 
 
+def get_ai_interface_mode(settings) -> str:
+    value = (getattr(settings, "ai_interface_mode", None) or "").strip().lower()
+    if value not in AI_INTERFACE_MODE_VALUES:
+        return AI_INTERFACE_MODE_AUTO
+    return value
+
+
 def create_ai_service_from_settings(
     settings,
     require_enabled: bool = False,
@@ -759,6 +1316,7 @@ def create_ai_service_from_settings(
             api_base_url=settings.ai_api_base_url,
             api_key=settings.ai_api_key,
             model_name=model_name,
+            interface_mode=get_ai_interface_mode(settings),
             temperature=get_ai_temperature_for_task(settings, task=task),
             max_tokens=settings.ai_max_tokens
         )

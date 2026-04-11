@@ -823,7 +823,7 @@
                         </div>
                         <div class="modal-body">
                           <div class="row g-3">
-                            <div class="col-12">
+                            <div class="col-lg-8">
                               <label class="form-label fw-bold"
                                 >手动默认模型</label
                               >
@@ -835,6 +835,13 @@
                               {% endfor %} {% endif %}
                               <div class="form-text">
                                 仅在你想强制指定单一模型时填写。未填写时，系统会优先使用自动探测结果。
+                              </div>
+                            </div>
+                            <div class="col-lg-4">
+                              <label class="form-label fw-bold">接口模式</label>
+                              {{ form.ai_interface_mode(class="form-select") }}
+                              <div class="form-text">
+                                自动兜底会依次尝试 Chat、Chat 流式 和 Responses。
                               </div>
                             </div>
                             <div class="col-6">
@@ -1666,6 +1673,7 @@
       ? document.querySelector('label[for="ai_auto_model_selection_enabled"]')
       : null;
     const aiManualModelInput = document.getElementById("ai_model_name");
+    const aiInterfaceModeInput = document.getElementById("ai_interface_mode");
     const aiModelCatalogField = document.getElementById("ai_model_catalog_json");
     const aiProbeErrorField = document.getElementById("ai_model_probe_error");
     const aiProbeLastAtField = document.getElementById("ai_model_probe_last_at");
@@ -1775,6 +1783,13 @@
       const stats = state.stats || {};
       const chips = [];
 
+      const interfaceMode = (state.interface_mode || "auto").trim();
+      const interfaceModeText = {
+        auto: "自动兜底",
+        chat: "Chat",
+        responses: "Responses",
+      }[interfaceMode] || "自动兜底";
+
         if (stats.total_models) {
           chips.push(
             `<span class="ai-inline-chip">已发现 ${stats.total_models} 个模型</span>`
@@ -1792,6 +1807,10 @@
             '<span class="ai-inline-chip">尚未检测模型</span>'
           );
         }
+
+        chips.push(
+          `<span class="ai-inline-chip">接口模式 ${escapeHtml(interfaceModeText)}</span>`
+        );
 
         if (state.probe_last_at) {
           chips.push(
@@ -1908,6 +1927,20 @@
                   '<span class="ai-inline-chip">JSON Mode</span>'
                 );
               }
+              if (item.text_protocol) {
+                capabilityChips.push(
+                  `<span class="ai-inline-chip">文本 ${escapeHtml(
+                    item.text_protocol
+                  )}</span>`
+                );
+              }
+              if (item.json_protocol) {
+                capabilityChips.push(
+                  `<span class="ai-inline-chip">结构化 ${escapeHtml(
+                    item.json_protocol
+                  )}</span>`
+                );
+              }
               if (item.latency_ms) {
                 capabilityChips.push(
                   `<span class="ai-inline-chip">${item.latency_ms} ms</span>`
@@ -1962,6 +1995,9 @@
       currentAiProbeState.manual_model_name = aiManualModelInput
         ? aiManualModelInput.value.trim()
         : currentAiProbeState.manual_model_name || "";
+      currentAiProbeState.interface_mode = aiInterfaceModeInput
+        ? aiInterfaceModeInput.value.trim()
+        : currentAiProbeState.interface_mode || "auto";
 
       syncAiAutoSwitchLabel();
       syncAiProbeFields(currentAiProbeState);
@@ -1976,6 +2012,9 @@
     if (aiManualModelInput) {
       aiManualModelInput.addEventListener("input", renderAiProbeState);
     }
+    if (aiInterfaceModeInput) {
+      aiInterfaceModeInput.addEventListener("change", renderAiProbeState);
+    }
 
     renderAiProbeState();
 
@@ -1988,6 +2027,9 @@
         const modelName = aiManualModelInput
           ? aiManualModelInput.value.trim()
           : "";
+        const interfaceMode = aiInterfaceModeInput
+          ? aiInterfaceModeInput.value.trim()
+          : "auto";
 
         detectAiModelsBtn.disabled = true;
         detectAiModelsBtn.innerHTML =
@@ -2011,6 +2053,7 @@
             api_base_url: apiBaseUrl,
             api_key: apiKeyInput,
             model_name: modelName,
+            interface_mode: interfaceMode,
             auto_enabled: !!(aiAutoSwitch && aiAutoSwitch.checked),
           }),
         })
@@ -2022,6 +2065,7 @@
               currentAiProbeState.auto_enabled = !!(
                 aiAutoSwitch && aiAutoSwitch.checked
               );
+              currentAiProbeState.interface_mode = interfaceMode;
               renderAiProbeState();
               testResultDiv.innerHTML =
                 '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-2"></i>' +
@@ -2058,6 +2102,9 @@
         const modelName =
           effectiveModels.intent ||
           (aiManualModelInput ? aiManualModelInput.value.trim() : "");
+        const interfaceMode = aiInterfaceModeInput
+          ? aiInterfaceModeInput.value.trim()
+          : "auto";
 
         testAiConfigBtn.disabled = true;
         testAiConfigBtn.innerHTML =
@@ -2081,6 +2128,7 @@
             api_base_url: apiBaseUrl,
             api_key: apiKeyInput,
             model_name: modelName,
+            interface_mode: interfaceMode,
           }),
         })
           .then((response) => response.json())

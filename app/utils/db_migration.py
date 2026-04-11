@@ -110,6 +110,7 @@ def migrate_site_settings_fields(db_path: str) -> int:
             ('ai_api_base_url', 'VARCHAR(512)'),
             ('ai_api_key', 'VARCHAR(512)'),
             ('ai_model_name', 'VARCHAR(128)'),
+            ('ai_interface_mode', "VARCHAR(32) DEFAULT 'auto'"),
             ('ai_temperature', 'REAL DEFAULT 0.7'),
             ('ai_max_tokens', 'INTEGER DEFAULT 500'),
             ('ai_auto_model_selection_enabled', 'BOOLEAN DEFAULT 1'),

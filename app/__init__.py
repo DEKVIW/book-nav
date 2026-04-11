@@ -82,6 +82,7 @@ def create_app(config_class=Config):
                 'ai_api_base_url': None,
                 'ai_api_key': None,
                 'ai_model_name': None,
+                'ai_interface_mode': 'auto',
                 'ai_temperature': 0.7,
                 'ai_max_tokens': 500,
                 'ai_auto_model_selection_enabled': True,

@@ -198,6 +198,11 @@ class SiteSettingsForm(FlaskForm):
     ai_api_base_url = StringField('API基础URL', validators=[Optional(), URL(), Length(max=512)], description='例如: https://api.openai.com')
     ai_api_key = PasswordField('API密钥', validators=[Optional(), Length(max=256)], description='留空则不修改现有密钥')
     ai_model_name = StringField('手动默认模型', validators=[Optional(), Length(max=128)], default='', description='可选。留空时系统可根据探测结果自动选择更适合当前项目的模型')
+    ai_interface_mode = SelectField('接口模式', choices=[
+        ('auto', '自动兜底'),
+        ('chat', 'Chat'),
+        ('responses', 'Responses')
+    ], validators=[Optional()], default='auto', description='自动兜底会优先尝试 Chat 非流式，再回退到 Chat 流式和 Responses')
     ai_temperature = StringField('温度参数', validators=[Optional()], default='0.7', description='0-1之间，控制随机性，默认0.7')
     ai_max_tokens = IntegerField('最大Token数', validators=[Optional(), NumberRange(min=100, max=2000)], default=500)
     
