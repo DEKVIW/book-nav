@@ -623,9 +623,8 @@
                           <div class="ai-mgr-switch-card">
                             <div>
                               <div class="fw-semibold small">启用AI搜索</div>
-                              <div class="text-muted ai-mgr-switch-hint">关闭后运行时不会使用 AI</div>
                             </div>
-                            <div class="form-check form-switch mb-0">
+                            <div class="form-check form-switch mb-0 ai-mgr-switch-control">
                               {{ form.ai_search_enabled(class="form-check-input") }}
                               <label class="form-check-label" for="ai_search_enabled">
                                 {% if settings.ai_search_enabled %}已启用{% else %}已关闭{% endif %}
@@ -637,9 +636,8 @@
                           <div class="ai-mgr-switch-card">
                             <div>
                               <div class="fw-semibold small">允许匿名</div>
-                              <div class="text-muted ai-mgr-switch-hint">仅对前台 AI 搜索生效</div>
                             </div>
-                            <div class="form-check form-switch mb-0">
+                            <div class="form-check form-switch mb-0 ai-mgr-switch-control">
                               {{ form.ai_search_allow_anonymous(class="form-check-input", id="ai_search_allow_anonymous") }}
                               <label class="form-check-label" for="ai_search_allow_anonymous">
                                 {% if settings.ai_search_allow_anonymous %}已允许{% else %}已禁止{% endif %}
@@ -2894,32 +2892,6 @@
     {% endif %}
   });
 
-  // 控制"允许非登录用户使用AI搜索"开关的启用/禁用状态
-  const aiSearchEnabled = document.getElementById("ai_search_enabled");
-  const aiSearchAllowAnonymous = document.getElementById(
-    "ai_search_allow_anonymous"
-  );
-
-  function updateAnonymousToggleState() {
-    if (aiSearchEnabled && aiSearchAllowAnonymous) {
-      if (!aiSearchEnabled.checked) {
-        // AI搜索未启用时，禁用并取消选中"允许非登录用户使用AI搜索"
-        aiSearchAllowAnonymous.disabled = true;
-        aiSearchAllowAnonymous.checked = false;
-      } else {
-        // AI搜索启用时，允许操作"允许非登录用户使用AI搜索"
-        aiSearchAllowAnonymous.disabled = false;
-      }
-    }
-  }
-
-  // 页面加载时设置初始状态
-  if (aiSearchEnabled) {
-    updateAnonymousToggleState();
-    // 监听"启用AI搜索"开关的变化
-    aiSearchEnabled.addEventListener("change", updateAnonymousToggleState);
-  }
-
   // 动态更新所有开关按钮的标签文字
   function updateSwitchLabel(checkboxId, labels) {
     const checkbox = document.getElementById(checkboxId);
@@ -3081,6 +3053,25 @@
     border: 1px solid rgba(15, 23, 42, 0.08);
     border-radius: 0.85rem;
     background: #fff;
+  }
+
+  .ai-mgr-switch-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .ai-mgr-switch-control .form-check-input {
+    float: none;
+    margin: 0;
+  }
+
+  .ai-mgr-switch-control .form-check-label {
+    margin: 0;
+    white-space: nowrap;
   }
 
   .ai-mgr-switch-hint {
