@@ -84,6 +84,35 @@ def migrate_webdav_config_table(db_path: str) -> int:
         return 0
 
 
+def migrate_ai_provider_config_table(db_path: str) -> int:
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_provider_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(128) NOT NULL DEFAULT 'Default AI Provider',
+                api_base_url VARCHAR(512),
+                api_key VARCHAR(512),
+                interface_mode VARCHAR(32) DEFAULT 'auto',
+                enabled BOOLEAN DEFAULT 1,
+                priority INTEGER DEFAULT 100,
+                model_catalog_json TEXT,
+                recommended_models_json TEXT,
+                probe_last_at DATETIME,
+                probe_error TEXT,
+                probe_signature VARCHAR(64),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+        return 1
+    except Exception:
+        return 0
+
+
 def migrate_site_settings_fields(db_path: str) -> int:
     """
     检查并添加 site_settings 表的缺失字段
@@ -122,7 +151,9 @@ def migrate_site_settings_fields(db_path: str) -> int:
             ('ai_selected_fallback_model', 'VARCHAR(128)'),
             ('ai_model_probe_last_at', 'DATETIME'),
             ('ai_model_probe_error', 'TEXT'),
-            ('ai_model_probe_signature', 'VARCHAR(64)')
+            ('ai_model_probe_signature', 'VARCHAR(64)'),
+            ('ai_task_bindings_json', 'TEXT'),
+            ('ai_task_test_results_json', 'TEXT')
         ]
         
         # 向量搜索配置字段

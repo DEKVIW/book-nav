@@ -1,64 +1,66 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""AI 搜索服务工具类"""
+"""AI search and content utility services."""
 
 import json
-import requests
 import re
 from typing import Any, Dict, List, Optional, Tuple
+
+import requests
 from flask import current_app
 
-# AI 搜索提示词模板
-AI_SEARCH_PROMPT_TEMPLATE = """你是一个专业的网站导航助手。用户想要搜索网站，请根据用户的搜索查询，理解其真实意图，并提取关键信息。
 
-用户搜索查询：{user_query}
+AI_SEARCH_PROMPT_TEMPLATE = """You are a website search assistant.
+Analyze the user's intent and return JSON only.
 
-请完成以下任务：
-1. 理解用户的搜索意图（例如：想要找什么类型的网站、用途是什么）
-2. 提取关键词（包括同义词、相关词）
-3. 分析可能的搜索场景（例如：学习、工作、娱乐等）
+User query: {user_query}
 
-请以JSON格式返回结果：
+Return exactly this JSON shape:
 {{
-    "intent": "用户的搜索意图描述",
-    "keywords": ["关键词1", "关键词2", "关键词3"],
-    "related_terms": ["相关词1", "相关词2"],
-    "category_hints": ["可能的分类1", "可能的分类2"],
-    "search_type": "exact|fuzzy|semantic"
-}}
+  "intent": "user intent",
+  "keywords": ["keyword1", "keyword2"],
+  "related_terms": ["term1", "term2"],
+  "category_hints": ["category1", "category2"],
+  "search_type": "exact|fuzzy|semantic"
+}}"""
 
-只返回JSON，不要其他内容。"""
+AI_SEARCH_RECOMMEND_PROMPT_TEMPLATE = """You are a website ranking assistant.
+Rank candidate websites for the given user query and return JSON only.
 
-AI_SEARCH_RECOMMEND_PROMPT_TEMPLATE = """你是一个专业的网站导航助手。你拥有一个包含所有可用网站的完整数据库。请基于用户查询，从所有网站中推荐最相关的网站。
-
-用户搜索查询：{user_query}
-用户意图：{intent}
-
-所有可用网站列表（共{total_count}个）：
+User query: {user_query}
+Intent summary: {intent}
+Candidate count: {total_count}
+Maximum recommendations: {max_recommendations}
+Candidates:
 {websites_list}
 
-请仔细分析用户查询和每个网站的相关性，考虑：
-1. 网站标题是否匹配用户需求
-2. 网站描述是否相关
-3. 网站分类是否相关
-4. 语义相关性（即使没有完全匹配的关键词）
-5. 向量相似度分数（如果提供）
-
-请返回最相关的网站（最多{max_recommendations}个），按相关性从高到低排序。
-
-请以JSON格式返回：
+Return exactly this JSON shape:
 {{
-    "recommendations": [
-        {{
-            "website_id": 1,
-            "relevance_score": 0.95,
-            "reason": "推荐理由（说明为什么这个网站与用户查询相关）"
-        }}
-    ],
-    "summary": "搜索总结（简要说明找到了什么类型的网站）"
-}}
+  "recommendations": [
+    {{
+      "website_id": 1,
+      "relevance_score": 0.95,
+      "reason": "why it matches"
+    }}
+  ],
+  "summary": "short summary"
+}}"""
 
-只返回JSON，不要其他内容。"""
+WEBSITE_INFO_PROMPT_TEMPLATE = """Generate website metadata from the URL below.
+Return JSON only.
+
+Website URL: {url}
+
+Requirements:
+1. title: concise and descriptive, ideally within 20 characters.
+2. description: accurate summary of the website's function or content, ideally within 200 characters.
+3. If you are unsure, infer conservatively from the domain and URL path.
+
+Return exactly:
+{{
+  "title": "website title",
+  "description": "website description"
+}}"""
 
 
 class AIServiceError(Exception):
@@ -83,6 +85,7 @@ AI_TASK_MODEL_FIELDS = {
     "translate": "ai_selected_translate_model",
     "site_info": "ai_selected_site_info_model",
 }
+AI_TASK_KEYS = tuple(AI_TASK_MODEL_FIELDS.keys())
 
 AI_INTERFACE_MODE_AUTO = "auto"
 AI_INTERFACE_MODE_CHAT = "chat"
@@ -94,13 +97,106 @@ AI_INTERFACE_MODE_VALUES = {
 }
 
 
+class AIFailoverService:
+    """Try multiple configured AI services in order until one succeeds."""
+
+    def __init__(self, services: List["AISearchService"]):
+        self._services = services
+        self.last_protocol_used: str = ""
+        self.last_attempt_trace: List[Dict[str, str]] = []
+        self.provider_id = None
+        self.provider_name = ""
+        self.model_name = ""
+        self.interface_mode = ""
+        self.candidate_descriptions = [
+            {
+                "provider_id": getattr(service, "provider_id", None),
+                "provider_name": getattr(service, "provider_name", ""),
+                "model_name": getattr(service, "model_name", ""),
+                "interface_mode": getattr(service, "interface_mode", ""),
+            }
+            for service in services
+        ]
+
+    def _sync_runtime_metadata(self, service: "AISearchService") -> None:
+        self.last_protocol_used = getattr(service, "last_protocol_used", "") or ""
+        self.last_attempt_trace = list(getattr(service, "last_attempt_trace", []) or [])
+        self.provider_id = getattr(service, "provider_id", None)
+        self.provider_name = getattr(service, "provider_name", "") or ""
+        self.model_name = getattr(service, "model_name", "") or ""
+        self.interface_mode = getattr(service, "interface_mode", "") or ""
+
+    def _run(self, method_name: str, *args, **kwargs):
+        errors: List[str] = []
+        last_error: Optional[Exception] = None
+
+        for service in self._services:
+            try:
+                result = getattr(service, method_name)(*args, **kwargs)
+                self._sync_runtime_metadata(service)
+                return result
+            except Exception as exc:
+                last_error = exc
+                provider_name = getattr(service, "provider_name", "") or "AI"
+                model_name = getattr(service, "model_name", "") or "unknown"
+                errors.append(f"{provider_name}/{model_name}: {str(exc)}")
+                current_app.logger.warning(
+                    "AI failover attempt failed for %s via %s/%s: %s",
+                    method_name,
+                    provider_name,
+                    model_name,
+                    str(exc),
+                )
+
+        if last_error is not None:
+            if errors:
+                raise Exception("；".join(errors[:3]))
+            raise last_error
+        raise Exception("没有可用的 AI 服务候选项")
+
+    def probe_text_output(self):
+        return self._run("probe_text_output")
+
+    def analyze_search_intent(self, user_query: str):
+        return self._run("analyze_search_intent", user_query)
+
+    def recommend_websites(
+        self,
+        user_query: str,
+        intent: dict,
+        websites: List[dict],
+        vector_scores: Optional[Dict[int, float]] = None,
+        max_recommendations: int = 20,
+    ):
+        return self._run(
+            "recommend_websites",
+            user_query,
+            intent,
+            websites,
+            vector_scores=vector_scores,
+            max_recommendations=max_recommendations,
+        )
+
+    def translate_text(self, text: str, target_lang: str = "zh"):
+        return self._run("translate_text", text, target_lang=target_lang)
+
+    def generate_website_info(self, url: str):
+        return self._run("generate_website_info", url)
+
+
 class AISearchService:
-    """AI 搜索服务类"""
-    
-    def __init__(self, api_base_url: str, api_key: str, model_name: str,
-                 temperature: float = 0.7, max_tokens: int = 500,
-                 interface_mode: str = AI_INTERFACE_MODE_AUTO):
-        self.api_base_url = api_base_url.rstrip('/')
+    """Unified AI service wrapper for text and structured tasks."""
+
+    def __init__(
+        self,
+        api_base_url: str,
+        api_key: str,
+        model_name: str,
+        temperature: float = 0.7,
+        max_tokens: int = 500,
+        interface_mode: str = AI_INTERFACE_MODE_AUTO,
+    ):
+        self.api_base_url = api_base_url.rstrip("/")
         self.api_key = api_key
         self.model_name = model_name
         self.temperature = float(temperature) if temperature is not None else 0.7
@@ -109,19 +205,27 @@ class AISearchService:
         self._json_object_response_format_supported: Optional[bool] = None
         self.last_protocol_used: str = ""
         self.last_attempt_trace: List[Dict[str, str]] = []
+        self.provider_id = None
+        self.provider_name = ""
+        self.service_source = ""
 
-    def _call_api(self, messages: List[dict], temperature: float = None,
-                  max_tokens: int = None, expect_json: bool = False) -> dict:
-        data = {
+    def _call_api(
+        self,
+        messages: List[dict],
+        temperature: float = None,
+        max_tokens: int = None,
+        expect_json: bool = False,
+    ) -> dict:
+        chat_data = {
             "model": self.model_name,
             "messages": messages,
             "temperature": self.temperature if temperature is None else temperature,
-            "max_tokens": self.max_tokens if max_tokens is None else max_tokens
+            "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
         }
 
         allow_json_mode_fallback = False
         if expect_json and self._json_object_response_format_supported is not False:
-            data["response_format"] = {"type": "json_object"}
+            chat_data["response_format"] = {"type": "json_object"}
             allow_json_mode_fallback = True
 
         self.last_protocol_used = ""
@@ -129,7 +233,7 @@ class AISearchService:
 
         attempts = self._build_request_attempts(
             messages=messages,
-            chat_data=data,
+            chat_data=chat_data,
             allow_json_mode_fallback=allow_json_mode_fallback,
         )
 
@@ -144,18 +248,22 @@ class AISearchService:
                     self._parse_json_response(response_text)
 
                 self.last_protocol_used = attempt_name
-                self.last_attempt_trace.append({
-                    "protocol": attempt_name,
-                    "status": "success",
-                })
+                self.last_attempt_trace.append(
+                    {
+                        "protocol": attempt_name,
+                        "status": "success",
+                    }
+                )
                 return payload
             except Exception as exc:
                 last_error = exc
-                self.last_attempt_trace.append({
-                    "protocol": attempt_name,
-                    "status": "failed",
-                    "error": str(exc),
-                })
+                self.last_attempt_trace.append(
+                    {
+                        "protocol": attempt_name,
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
                 if self._should_try_next_attempt(exc):
                     current_app.logger.warning(
                         "AI request via %s failed for model %s, falling back: %s",
@@ -180,52 +288,54 @@ class AISearchService:
         attempts: List[Tuple[str, Any]] = []
 
         if self.interface_mode == AI_INTERFACE_MODE_CHAT:
-            attempts.extend([
-                (
-                    "chat",
-                    lambda: self._post_chat_completion(
-                        chat_data,
-                        allow_json_mode_fallback=allow_json_mode_fallback,
+            attempts.extend(
+                [
+                    (
+                        "chat",
+                        lambda: self._post_chat_completion(
+                            chat_data,
+                            allow_json_mode_fallback=allow_json_mode_fallback,
+                        ),
                     ),
-                ),
-                (
-                    "chat_stream",
-                    lambda: self._stream_chat_completion(
-                        chat_data,
+                    (
+                        "chat_stream",
+                        lambda: self._stream_chat_completion(chat_data),
                     ),
-                ),
-            ])
+                ]
+            )
         elif self.interface_mode == AI_INTERFACE_MODE_RESPONSES:
-            attempts.append((
-                "responses",
-                lambda: self._post_responses(
-                    responses_data,
-                    fallback_prompt=self._flatten_messages_as_prompt(messages),
-                ),
-            ))
-        else:
-            attempts.extend([
-                (
-                    "chat",
-                    lambda: self._post_chat_completion(
-                        chat_data,
-                        allow_json_mode_fallback=allow_json_mode_fallback,
-                    ),
-                ),
-                (
-                    "chat_stream",
-                    lambda: self._stream_chat_completion(
-                        chat_data,
-                    ),
-                ),
+            attempts.append(
                 (
                     "responses",
                     lambda: self._post_responses(
                         responses_data,
                         fallback_prompt=self._flatten_messages_as_prompt(messages),
                     ),
-                ),
-            ])
+                )
+            )
+        else:
+            attempts.extend(
+                [
+                    (
+                        "chat",
+                        lambda: self._post_chat_completion(
+                            chat_data,
+                            allow_json_mode_fallback=allow_json_mode_fallback,
+                        ),
+                    ),
+                    (
+                        "chat_stream",
+                        lambda: self._stream_chat_completion(chat_data),
+                    ),
+                    (
+                        "responses",
+                        lambda: self._post_responses(
+                            responses_data,
+                            fallback_prompt=self._flatten_messages_as_prompt(messages),
+                        ),
+                    ),
+                ]
+            )
 
         return attempts
 
@@ -255,10 +365,7 @@ class AISearchService:
             return self._is_retryable_http_error(error.response)
         return False
 
-    def _is_retryable_http_error(
-        self,
-        response: Optional[requests.Response]
-    ) -> bool:
+    def _is_retryable_http_error(self, response: Optional[requests.Response]) -> bool:
         if response is None:
             return False
 
@@ -280,16 +387,20 @@ class AISearchService:
             "stream",
             "input_text",
             "max_output_tokens",
+            "instructions",
         ]
         return any(marker in error_text for marker in retryable_markers)
 
-    def _post_chat_completion(self, data: Dict[str, Any],
-                              allow_json_mode_fallback: bool = False,
-                              allow_temperature_fallback: bool = True) -> dict:
+    def _post_chat_completion(
+        self,
+        data: Dict[str, Any],
+        allow_json_mode_fallback: bool = False,
+        allow_temperature_fallback: bool = True,
+    ) -> dict:
         url = f"{self.api_base_url}/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         try:
@@ -299,24 +410,29 @@ class AISearchService:
             if data.get("response_format", {}).get("type") == "json_object":
                 self._json_object_response_format_supported = True
             return payload
-        except requests.exceptions.HTTPError as e:
-            response = e.response
+        except requests.exceptions.HTTPError as exc:
+            response = exc.response
             if allow_json_mode_fallback and self._should_retry_without_json_mode(response):
                 self._json_object_response_format_supported = False
                 current_app.logger.warning(
                     "AI provider rejected response_format=json_object; retrying without it"
                 )
-                fallback_data = data.copy()
+                fallback_data = dict(data)
                 fallback_data.pop("response_format", None)
                 return self._post_chat_completion(
                     fallback_data,
-                    allow_json_mode_fallback=False
+                    allow_json_mode_fallback=False,
+                    allow_temperature_fallback=allow_temperature_fallback,
                 )
-            if allow_temperature_fallback and "temperature" in data and self._should_retry_without_temperature(response):
+            if (
+                allow_temperature_fallback
+                and "temperature" in data
+                and self._should_retry_without_temperature(response)
+            ):
                 current_app.logger.warning(
                     "AI provider rejected temperature for chat/completions; retrying without it"
                 )
-                fallback_data = data.copy()
+                fallback_data = dict(data)
                 fallback_data.pop("temperature", None)
                 return self._post_chat_completion(
                     fallback_data,
@@ -325,13 +441,11 @@ class AISearchService:
                 )
             raise
 
-        return {}
-
     def _stream_chat_completion(self, data: Dict[str, Any]) -> dict:
         url = f"{self.api_base_url}/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
         stream_data = dict(data)
         stream_data.pop("response_format", None)
@@ -348,6 +462,7 @@ class AISearchService:
 
         text_parts: List[str] = []
         has_event_payload = False
+
         for raw_line in response.iter_lines(decode_unicode=True):
             if raw_line is None:
                 continue
@@ -377,16 +492,15 @@ class AISearchService:
                 "choices": [
                     {
                         "message": {
-                            "content": aggregated_text
+                            "content": aggregated_text,
                         }
                     }
                 ]
             }
 
         if has_event_payload:
-            raise AIEmptyResponseError("Chat 流式返回成功，但未拼接出可用文本内容")
+            raise AIEmptyResponseError("Chat 流式返回成功，但没有拼接出可用文本")
         raise AICompatibilityError("Chat 流式返回格式异常，未收到可解析的事件数据")
-
     def _build_responses_request(
         self,
         messages: List[dict],
@@ -408,16 +522,17 @@ class AISearchService:
                 instructions.append(text)
                 continue
 
-            response_role = "assistant" if role == "assistant" else "user"
-            input_items.append({
-                "role": response_role,
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": text,
-                    }
-                ]
-            })
+            input_items.append(
+                {
+                    "role": "assistant" if role == "assistant" else "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": text,
+                        }
+                    ],
+                }
+            )
 
         data: Dict[str, Any] = {
             "model": self.model_name,
@@ -446,15 +561,15 @@ class AISearchService:
         url = f"{self.api_base_url}/v1/responses"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         try:
             response = requests.post(url, json=data, headers=headers, timeout=30)
             response.raise_for_status()
             return response.json()
-        except requests.exceptions.HTTPError as e:
-            response = e.response
+        except requests.exceptions.HTTPError as exc:
+            response = exc.response
             if (
                 allow_instructions_fallback
                 and "instructions" in data
@@ -519,6 +634,7 @@ class AISearchService:
 
     def _extract_chat_stream_text_parts(self, payload: Dict[str, Any]) -> List[str]:
         parts: List[str] = []
+
         choices = payload.get("choices")
         if isinstance(choices, list):
             for choice in choices:
@@ -526,14 +642,14 @@ class AISearchService:
                     continue
                 delta = choice.get("delta")
                 if delta is not None:
-                    part = self._coerce_stream_content_to_text(delta)
-                    if part:
-                        parts.append(part)
+                    delta_text = self._coerce_stream_content_to_text(delta)
+                    if delta_text:
+                        parts.append(delta_text)
                 message = choice.get("message")
                 if message is not None:
-                    part = self._coerce_stream_content_to_text(message)
-                    if part:
-                        parts.append(part)
+                    message_text = self._coerce_stream_content_to_text(message)
+                    if message_text:
+                        parts.append(message_text)
                 text = self._coerce_stream_content_to_text(choice.get("text"))
                 if text:
                     parts.append(text)
@@ -553,10 +669,9 @@ class AISearchService:
             return str(content)
         if isinstance(content, list):
             return "".join(
-                part for part in (
-                    self._coerce_stream_content_to_text(item)
-                    for item in content
-                ) if part
+                part
+                for part in (self._coerce_stream_content_to_text(item) for item in content)
+                if part
             )
         if isinstance(content, dict):
             for key in ("text", "content", "delta", "output_text", "value"):
@@ -584,10 +699,7 @@ class AISearchService:
             segments.append(f"{role_label}: {text}")
         return "\n\n".join(segments)
 
-    def _should_retry_without_json_mode(
-        self,
-        response: Optional[requests.Response]
-    ) -> bool:
+    def _should_retry_without_json_mode(self, response: Optional[requests.Response]) -> bool:
         if response is None or response.status_code not in (400, 404, 415, 422):
             return False
 
@@ -602,14 +714,11 @@ class AISearchService:
             "unknown field",
             "invalid parameter",
             "unrecognized request argument",
-            "extra inputs are not permitted"
+            "extra inputs are not permitted",
         ]
         return any(marker in error_text for marker in unsupported_markers)
 
-    def _should_retry_without_temperature(
-        self,
-        response: Optional[requests.Response]
-    ) -> bool:
+    def _should_retry_without_temperature(self, response: Optional[requests.Response]) -> bool:
         if response is None or response.status_code not in (400, 404, 415, 422):
             return False
 
@@ -622,14 +731,9 @@ class AISearchService:
             "unrecognized request argument",
             "extra inputs are not permitted",
         ]
-        return "temperature" in error_text and any(
-            marker in error_text for marker in generic_markers
-        )
+        return "temperature" in error_text and any(marker in error_text for marker in generic_markers)
 
-    def _should_retry_without_instructions(
-        self,
-        response: Optional[requests.Response]
-    ) -> bool:
+    def _should_retry_without_instructions(self, response: Optional[requests.Response]) -> bool:
         if response is None or response.status_code not in (400, 404, 415, 422):
             return False
 
@@ -642,21 +746,15 @@ class AISearchService:
             "unrecognized request argument",
             "extra inputs are not permitted",
         ]
-        return "instructions" in error_text and any(
-            marker in error_text for marker in generic_markers
-        )
+        return "instructions" in error_text and any(marker in error_text for marker in generic_markers)
 
-    def _should_retry_responses_with_flat_prompt(
-        self,
-        response: Optional[requests.Response]
-    ) -> bool:
+    def _should_retry_responses_with_flat_prompt(self, response: Optional[requests.Response]) -> bool:
         if response is None or response.status_code not in (400, 404, 415, 422):
             return False
 
         error_text = (response.text or "").lower()
         unsupported_markers = [
             "input_text",
-            "content",
             "expected a string",
             "invalid type",
             "messages",
@@ -666,10 +764,7 @@ class AISearchService:
         ]
         return any(marker in error_text for marker in unsupported_markers)
 
-    def _should_retry_responses_with_legacy_max_tokens(
-        self,
-        response: Optional[requests.Response]
-    ) -> bool:
+    def _should_retry_responses_with_legacy_max_tokens(self, response: Optional[requests.Response]) -> bool:
         if response is None or response.status_code not in (400, 404, 415, 422):
             return False
 
@@ -690,6 +785,7 @@ class AISearchService:
             raise AICompatibilityError("AI API 返回格式异常，响应不是 JSON 对象")
 
         issues: List[str] = []
+
         choices = response.get("choices")
         if isinstance(choices, list):
             for index, choice in enumerate(choices):
@@ -703,7 +799,8 @@ class AISearchService:
         if output_text:
             return output_text
 
-        output_text = self._coerce_content_to_text(response.get("output"))
+        output = response.get("output")
+        output_text = self._coerce_content_to_text(output)
         if output_text:
             return output_text
 
@@ -717,7 +814,6 @@ class AISearchService:
 
         if issues:
             raise AIEmptyResponseError("；".join(issues[:3]))
-
         raise AIEmptyResponseError("AI API 返回成功，但没有可用的文本内容")
 
     def _extract_choice_text(self, choice: Any, index: int) -> Tuple[str, Optional[str]]:
@@ -738,7 +834,7 @@ class AISearchService:
     def _extract_message_text(
         self,
         message: Dict[str, Any],
-        label: str
+        label: str,
     ) -> Tuple[str, Optional[str]]:
         text = self._coerce_content_to_text(message.get("content"))
         if text:
@@ -771,7 +867,7 @@ class AISearchService:
             return str(content)
 
         if isinstance(content, list):
-            parts = []
+            parts: List[str] = []
             for item in content:
                 part = self._coerce_content_to_text(item)
                 if part:
@@ -779,8 +875,22 @@ class AISearchService:
             return "\n".join(parts).strip()
 
         if isinstance(content, dict):
-            parts = []
-            for key in ("text", "value", "content", "output_text", "parts", "message", "output"):
+            if content.get("type") == "text" and isinstance(content.get("text"), str):
+                return content["text"].strip()
+            if content.get("type") == "output_text" and isinstance(content.get("text"), str):
+                return content["text"].strip()
+
+            parts: List[str] = []
+            for key in (
+                "text",
+                "value",
+                "content",
+                "output_text",
+                "parts",
+                "message",
+                "output",
+                "delta",
+            ):
                 if key in content:
                     part = self._coerce_content_to_text(content.get(key))
                     if part:
@@ -793,7 +903,7 @@ class AISearchService:
         if not isinstance(candidates, list):
             return ""
 
-        parts = []
+        parts: List[str] = []
         for candidate in candidates:
             if not isinstance(candidate, dict):
                 continue
@@ -802,7 +912,6 @@ class AISearchService:
                 parts.append(part)
 
         return "\n".join(parts).strip()
-
     def _parse_json_response(self, content: Any) -> Any:
         text = self._coerce_content_to_text(content)
         if not text:
@@ -846,9 +955,9 @@ class AISearchService:
         self,
         text: str,
         opener: str,
-        closer: str
+        closer: str,
     ) -> List[str]:
-        segments = []
+        segments: List[str] = []
         depth = 0
         start = None
         in_string = False
@@ -889,7 +998,7 @@ class AISearchService:
             stripped = current.strip()
             if not stripped:
                 break
-            if stripped[0] not in ('{', '[', '"'):
+            if stripped[0] not in ("{", "[", '"'):
                 break
             try:
                 current = json.loads(stripped)
@@ -905,7 +1014,7 @@ class AISearchService:
         else:
             raw_items = re.split(r"[\n,，、]+", self._coerce_content_to_text(value))
 
-        result = []
+        result: List[str] = []
         seen = set()
         for item in raw_items:
             text = self._coerce_content_to_text(item).strip()
@@ -938,7 +1047,7 @@ class AISearchService:
             "keywords": keywords,
             "related_terms": self._normalize_string_list(payload.get("related_terms")),
             "category_hints": self._normalize_string_list(payload.get("category_hints")),
-            "search_type": search_type
+            "search_type": search_type,
         }
 
     def _normalize_recommendation_item(self, item: Any) -> Optional[dict]:
@@ -959,7 +1068,7 @@ class AISearchService:
 
         score = item.get(
             "relevance_score",
-            item.get("score", item.get("relevance", item.get("confidence")))
+            item.get("score", item.get("relevance", item.get("confidence"))),
         )
         try:
             score = float(score) if score is not None else 0.0
@@ -971,7 +1080,7 @@ class AISearchService:
             "relevance_score": score,
             "reason": self._coerce_content_to_text(
                 item.get("reason", item.get("explanation", item.get("summary")))
-            )
+            ),
         }
 
     def _normalize_recommendations_result(self, payload: Any) -> dict:
@@ -981,9 +1090,7 @@ class AISearchService:
         if isinstance(payload, list):
             raw_recommendations = payload
         elif isinstance(payload, dict):
-            summary = self._coerce_content_to_text(
-                payload.get("summary", payload.get("message"))
-            )
+            summary = self._coerce_content_to_text(payload.get("summary", payload.get("message")))
             for key in ("recommendations", "results", "items"):
                 candidate = payload.get(key)
                 if isinstance(candidate, list):
@@ -1011,7 +1118,7 @@ class AISearchService:
         else:
             raise AIJSONParseError("AI 推荐结果不是可解析的 JSON")
 
-        normalized = []
+        normalized: List[dict] = []
         for item in raw_recommendations or []:
             recommendation = self._normalize_recommendation_item(item)
             if recommendation:
@@ -1022,7 +1129,7 @@ class AISearchService:
 
         return {
             "recommendations": normalized,
-            "summary": summary
+            "summary": summary,
         }
 
     def _normalize_website_info_result(self, payload: Any) -> dict:
@@ -1045,7 +1152,7 @@ class AISearchService:
 
         return {
             "title": title,
-            "description": description
+            "description": description,
         }
 
     def _cleanup_plain_text(self, text: str) -> str:
@@ -1064,12 +1171,12 @@ class AISearchService:
         messages = [
             {
                 "role": "system",
-                "content": "你是简洁的助手。"
+                "content": "You are a concise assistant.",
             },
             {
                 "role": "user",
-                "content": "请只回复：test"
-            }
+                "content": "Reply with exactly: test",
+            },
         ]
         response = self._call_api(messages, temperature=0, max_tokens=32)
         text = self._cleanup_plain_text(self._extract_response_text(response))
@@ -1086,9 +1193,9 @@ class AISearchService:
         messages = [
             {
                 "role": "system",
-                "content": "你是专业的网站搜索助手，擅长理解用户搜索意图并提取关键词。"
+                "content": "You are a website search assistant. Return JSON only.",
             },
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         try:
@@ -1096,21 +1203,26 @@ class AISearchService:
             content = self._extract_response_text(response)
             intent_result = self._parse_json_response(content)
             return self._normalize_intent_result(intent_result, user_query)
-        except Exception as e:
-            current_app.logger.error(f"AI 意图分析失败: {str(e)}")
+        except Exception as exc:
+            current_app.logger.error(f"AI 意图分析失败: {str(exc)}")
             raise
 
-    def recommend_websites(self, user_query: str, intent: dict, websites: List[dict],
-                          vector_scores: Optional[Dict[int, float]] = None,
-                          max_recommendations: int = 20) -> dict:
-        websites_with_scores = []
+    def recommend_websites(
+        self,
+        user_query: str,
+        intent: dict,
+        websites: List[dict],
+        vector_scores: Optional[Dict[int, float]] = None,
+        max_recommendations: int = 20,
+    ) -> dict:
+        websites_with_scores: List[dict] = []
         for website in websites:
             website_dict = website.copy() if isinstance(website, dict) else {
                 "id": website.id if hasattr(website, "id") else website.get("id"),
                 "title": website.title if hasattr(website, "title") else website.get("title", ""),
                 "description": website.description if hasattr(website, "description") else website.get("description", ""),
                 "category": website.category.name if hasattr(website, "category") and website.category else website.get("category", ""),
-                "url": website.url if hasattr(website, "url") else website.get("url", "")
+                "url": website.url if hasattr(website, "url") else website.get("url", ""),
             }
             if vector_scores and website_dict.get("id") in vector_scores:
                 website_dict["vector_score"] = vector_scores[website_dict["id"]]
@@ -1118,15 +1230,14 @@ class AISearchService:
 
         if vector_scores:
             websites_with_vector = [
-                website for website in websites_with_scores
-                if website.get("vector_score") is not None
+                website for website in websites_with_scores if website.get("vector_score") is not None
             ]
             websites_without_vector = [
-                website for website in websites_with_scores
-                if website.get("vector_score") is None
+                website for website in websites_with_scores if website.get("vector_score") is None
             ]
             websites_with_vector.sort(
-                key=lambda item: item.get("vector_score", 0), reverse=True
+                key=lambda item: item.get("vector_score", 0),
+                reverse=True,
             )
             websites_for_ai = websites_with_vector[:150] + websites_without_vector[:50]
         else:
@@ -1145,47 +1256,49 @@ class AISearchService:
             intent=intent.get("intent", ""),
             total_count=len(websites),
             websites_list=json.dumps(websites_for_ai, ensure_ascii=False, indent=2),
-            max_recommendations=max_recommendations
+            max_recommendations=max_recommendations,
         )
 
         messages = [
             {
                 "role": "system",
-                "content": "你是专业的网站推荐助手，能够准确评估网站与用户查询的相关性。"
+                "content": "You are a website recommendation assistant. Return JSON only.",
             },
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         try:
             response = self._call_api(messages, max_tokens=2000, expect_json=True)
             content = self._extract_response_text(response)
             parsed = self._parse_json_response(content)
-            return self._normalize_recommendations_result(parsed)
-        except Exception as e:
-            current_app.logger.error(f"AI 推荐失败: {str(e)}")
+            result = self._normalize_recommendations_result(parsed)
+            if max_recommendations > 0:
+                result["recommendations"] = result["recommendations"][:max_recommendations]
+            return result
+        except Exception as exc:
+            current_app.logger.error(f"AI 推荐失败: {str(exc)}")
             raise
 
-    def translate_text(self, text: str, target_lang: str = 'zh') -> str:
+    def translate_text(self, text: str, target_lang: str = "zh") -> str:
         if not text or not text.strip():
             return text
 
-        lang_name = "中文" if target_lang == 'zh' else target_lang
-        prompt = f"""请将以下文本翻译成{lang_name}，要求：
-1. 保持原意准确
-2. 语言自然流畅
-3. 只返回翻译结果，不要添加任何解释或说明
-
-原文：
-{text}
-
-翻译结果："""
+        lang_name = "中文" if target_lang == "zh" else target_lang
+        prompt = (
+            f"Please translate the following text into {lang_name}.\n"
+            "Requirements:\n"
+            "1. Preserve the original meaning accurately.\n"
+            "2. Keep the result natural and concise.\n"
+            "3. Return the translation only, with no extra explanation.\n\n"
+            f"Source text:\n{text}"
+        )
 
         messages = [
             {
                 "role": "system",
-                "content": "你是专业的翻译助手，擅长将各种语言准确翻译成目标语言。"
+                "content": "You are a professional translation assistant.",
             },
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         try:
@@ -1195,50 +1308,35 @@ class AISearchService:
             if not translated:
                 raise AIEmptyResponseError("AI 返回了空的翻译结果")
             return translated
-        except Exception as e:
-            current_app.logger.error(f"AI 翻译失败: {str(e)}")
-            raise Exception(f"翻译失败: {str(e)}")
+        except Exception as exc:
+            current_app.logger.error(f"AI 翻译失败: {str(exc)}")
+            raise Exception(f"翻译失败: {str(exc)}")
 
     def generate_website_info(self, url: str) -> dict:
-        prompt = f"""请根据以下网站 URL，生成一个简洁准确的网站标题和描述。
-
-网站 URL：{url}
-
-要求：
-1. 标题：简洁明了，不超过 20 个字符，准确反映网站的主要功能或内容
-2. 描述：准确描述网站的主要功能、用途和特点，不超过 200 个字符
-3. 使用中文
-4. 如果无法确定网站内容，可以根据 URL 和域名进行合理推测
-
-请以 JSON 格式返回：
-{{
-  "title": "网站标题",
-  "description": "网站描述"
-}}
-
-只返回 JSON，不要输出其他内容。"""
-
+        prompt = WEBSITE_INFO_PROMPT_TEMPLATE.format(url=url)
         messages = [
             {
                 "role": "system",
-                "content": "你是专业的网站分析助手，能够根据 URL 推断网站功能和内容。"
+                "content": "You generate concise website metadata and return JSON only.",
             },
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         try:
             response = self._call_api(
-                messages, temperature=0.5, max_tokens=300, expect_json=True
+                messages,
+                temperature=0.5,
+                max_tokens=300,
+                expect_json=True,
             )
             content = self._extract_response_text(response)
             parsed = self._parse_json_response(content)
             return self._normalize_website_info_result(parsed)
-        except Exception as e:
-            current_app.logger.error(f"AI 生成网站信息失败: {str(e)}")
-            raise Exception(f"生成网站信息失败: {str(e)}")
+        except Exception as exc:
+            current_app.logger.error(f"AI 生成网站信息失败: {str(exc)}")
+            raise Exception(f"生成网站信息失败: {str(exc)}")
 
-
-def get_ai_model_for_task(settings, task: Optional[str] = None) -> Optional[str]:
+def _legacy_model_from_settings(settings, task: Optional[str] = None) -> Optional[str]:
     auto_enabled = bool(getattr(settings, "ai_auto_model_selection_enabled", False))
     manual_model = (getattr(settings, "ai_model_name", None) or "").strip()
 
@@ -1275,52 +1373,195 @@ def get_ai_temperature_for_task(settings, task: Optional[str] = None) -> float:
     except (TypeError, ValueError):
         temperature = 0.7
 
-    # 结构化任务更适合低温度输出，减少多余文本与格式漂移。
     if task in {"intent", "rerank"}:
         return min(temperature, 0.2)
 
     return temperature
 
 
-def get_ai_interface_mode(settings) -> str:
-    value = (getattr(settings, "ai_interface_mode", None) or "").strip().lower()
+def get_ai_interface_mode(settings, provider=None) -> str:
+    source = provider if provider is not None else settings
+    value = (
+        getattr(source, "interface_mode", None)
+        or getattr(source, "ai_interface_mode", None)
+        or ""
+    ).strip().lower()
     if value not in AI_INTERFACE_MODE_VALUES:
         return AI_INTERFACE_MODE_AUTO
     return value
 
 
+def _get_provider_recommended_models(provider) -> Dict[str, str]:
+    if provider is None or not hasattr(provider, "get_recommended_models"):
+        return {}
+    models = provider.get_recommended_models()
+    return models if isinstance(models, dict) else {}
+
+
+def _get_provider_model_for_task(provider, task: Optional[str]) -> str:
+    models = _get_provider_recommended_models(provider)
+    if task and models.get(task):
+        return models[task]
+    if models.get("fallback"):
+        return models["fallback"]
+    if task and hasattr(provider, "get_model_catalog"):
+        try:
+            from app.utils.ai_model_discovery import select_task_models
+
+            selected = select_task_models(provider.get_model_catalog() or [])
+            if selected.get(task):
+                return selected[task]
+            if selected.get("fallback"):
+                return selected["fallback"]
+        except Exception:
+            return ""
+    return ""
+
+
+def _build_runtime_entry(
+    provider,
+    model_name: str,
+    task: Optional[str],
+    source: str,
+) -> Optional[Dict[str, Any]]:
+    api_base_url = (getattr(provider, "api_base_url", None) or "").strip()
+    api_key = (getattr(provider, "api_key", None) or "").strip()
+    model_name = (model_name or "").strip()
+    if not all([api_base_url, api_key, model_name]):
+        return None
+
+    return {
+        "provider_id": getattr(provider, "id", None),
+        "provider_name": (getattr(provider, "name", None) or "AI").strip(),
+        "api_base_url": api_base_url,
+        "api_key": api_key,
+        "model_name": model_name,
+        "interface_mode": get_ai_interface_mode(None, provider=provider),
+        "task": task or "",
+        "source": source,
+    }
+
+
+def resolve_ai_service_candidates(settings, task: Optional[str] = None) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+    providers = []
+    if hasattr(settings, "get_ai_providers"):
+        try:
+            providers = settings.get_ai_providers(enabled_only=False)
+        except Exception:
+            providers = []
+
+    provider_map = {getattr(provider, "id", None): provider for provider in providers}
+    bindings = settings.get_ai_task_bindings() if hasattr(settings, "get_ai_task_bindings") else {}
+    binding = bindings.get(task, {}) if task in AI_TASK_KEYS else {}
+    mode = (binding.get("mode") or "auto").strip().lower() if isinstance(binding, dict) else "auto"
+    provider_id = binding.get("provider_id") if isinstance(binding, dict) else None
+    model_name = (binding.get("model_name") or "").strip() if isinstance(binding, dict) else ""
+
+    if provider_map:
+        if task in AI_TASK_KEYS and mode == "manual":
+            provider = provider_map.get(provider_id)
+            if provider is None and hasattr(settings, "get_primary_ai_provider"):
+                provider = settings.get_primary_ai_provider(enabled_only=True)
+            entry = _build_runtime_entry(provider, model_name, task, "manual")
+            if entry:
+                candidates.append(entry)
+        else:
+            selected_providers: List[Any] = []
+            if provider_id and provider_map.get(provider_id):
+                selected_providers.append(provider_map[provider_id])
+            else:
+                selected_providers.extend(
+                    provider for provider in providers if bool(getattr(provider, "enabled", True))
+                )
+            if not selected_providers:
+                selected_providers.extend(providers)
+
+            for provider in selected_providers:
+                entry = _build_runtime_entry(
+                    provider,
+                    _get_provider_model_for_task(provider, task),
+                    task,
+                    "auto",
+                )
+                if entry:
+                    candidates.append(entry)
+
+    if not candidates:
+        legacy_model = (
+            model_name if mode == "manual" and model_name else _legacy_model_from_settings(settings, task=task)
+        )
+        api_base_url = (getattr(settings, "ai_api_base_url", None) or "").strip()
+        api_key = (getattr(settings, "ai_api_key", None) or "").strip()
+        if all([api_base_url, api_key, legacy_model]):
+            candidates.append(
+                {
+                    "provider_id": None,
+                    "provider_name": "Legacy AI",
+                    "api_base_url": api_base_url,
+                    "api_key": api_key,
+                    "model_name": legacy_model,
+                    "interface_mode": get_ai_interface_mode(settings),
+                    "task": task or "",
+                    "source": "legacy",
+                }
+            )
+
+    deduped: List[Dict[str, Any]] = []
+    seen = set()
+    for item in candidates:
+        dedupe_key = (
+            item.get("provider_id"),
+            item.get("api_base_url"),
+            item.get("model_name"),
+            item.get("interface_mode"),
+        )
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        deduped.append(item)
+
+    return deduped
+
+
+def get_ai_model_for_task(settings, task: Optional[str] = None) -> Optional[str]:
+    candidates = resolve_ai_service_candidates(settings, task=task)
+    if not candidates:
+        return None
+    return candidates[0].get("model_name")
+
+
 def create_ai_service_from_settings(
     settings,
     require_enabled: bool = False,
-    task: Optional[str] = None
+    task: Optional[str] = None,
 ) -> Optional[AISearchService]:
-    """
-    从站点设置创建 AI 搜索服务
-    
-    Args:
-        settings: SiteSettings 对象
-        
-    Returns:
-        AISearchService 实例，如果配置不完整则返回 None
-    """
     if require_enabled and not settings.ai_search_enabled:
         return None
-    
-    model_name = get_ai_model_for_task(settings, task=task)
 
-    if not all([settings.ai_api_base_url, settings.ai_api_key, model_name]):
+    candidates = resolve_ai_service_candidates(settings, task=task)
+    if not candidates:
         return None
-    
+
     try:
-        return AISearchService(
-            api_base_url=settings.ai_api_base_url,
-            api_key=settings.ai_api_key,
-            model_name=model_name,
-            interface_mode=get_ai_interface_mode(settings),
-            temperature=get_ai_temperature_for_task(settings, task=task),
-            max_tokens=settings.ai_max_tokens
-        )
-    except Exception as e:
-        current_app.logger.error(f"创建 AI 服务失败: {str(e)}")
-        return None
+        services: List[AISearchService] = []
+        for candidate in candidates:
+            service = AISearchService(
+                api_base_url=candidate["api_base_url"],
+                api_key=candidate["api_key"],
+                model_name=candidate["model_name"],
+                interface_mode=candidate["interface_mode"],
+                temperature=get_ai_temperature_for_task(settings, task=task),
+                max_tokens=settings.ai_max_tokens,
+            )
+            service.provider_id = candidate.get("provider_id")
+            service.provider_name = candidate.get("provider_name", "")
+            service.service_source = candidate.get("source", "")
+            services.append(service)
 
+        if len(services) == 1:
+            return services[0]
+        return AIFailoverService(services)
+    except Exception as exc:
+        current_app.logger.error(f"创建 AI 服务失败: {str(exc)}")
+        return None

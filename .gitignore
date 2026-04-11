@@ -93,3 +93,5 @@ coverage.xml
 
 # Reference projects (excluded from git)
 PixelPunk/
+
+/tests/

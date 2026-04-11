@@ -477,24 +477,27 @@ def goto(website_id):
     if website.is_private and not current_user.is_authenticated:
         flash('该网站需要登录后才能访问', 'warning')
         return redirect(url_for('auth.login'))
-    
-    if request.cookies.get('disableRedirect') == 'true':
-        website.views += 1
-        website.last_view = datetime.utcnow()
-        db.session.commit()
-        return redirect(website.url)
-    
+
     settings = SiteSettings.get_settings()
-    
+
     if current_user.is_authenticated and current_user.is_admin:
-        countdown = settings.admin_transition_time
+        countdown = settings.admin_transition_time or 0
     else:
-        countdown = settings.transition_time
-    
+        countdown = settings.transition_time or 0
+
+    direct_redirect = (
+        not settings.enable_transition
+        or request.cookies.get('disableRedirect') == 'true'
+        or int(countdown) <= 0
+    )
+
     website.views += 1
     website.last_view = datetime.utcnow()
     db.session.commit()
-    
+
+    if direct_redirect:
+        return redirect(website.url)
+
     return render_template('transition.html',
                          website=website,
                          countdown=countdown,

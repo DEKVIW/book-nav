@@ -586,174 +586,88 @@
               <div class="row">
                 <!-- 左列：AI搜索API配置 -->
                 <div class="col-md-6">
-                  <h6 class="mb-3">
-                    <i class="bi bi-robot me-2"></i>AI搜索配置
-                  </h6>
+                  <textarea class="d-none" id="ai_task_bindings_json" name="ai_task_bindings_json">{{ ai_management_state.task_bindings | tojson }}</textarea>
+                  <textarea class="d-none" id="ai_task_test_results_json" name="ai_task_test_results_json">{{ ai_management_state.task_test_results | tojson }}</textarea>
 
-                  <textarea class="d-none" id="ai_model_catalog_json" name="ai_model_catalog_json">{{ settings.ai_model_catalog_json or '' }}</textarea>
-                  <textarea class="d-none" id="ai_model_probe_error" name="ai_model_probe_error">{{ ai_probe_state.probe_error or '' }}</textarea>
-                  <input
-                    type="hidden"
-                    id="ai_selected_intent_model"
-                    name="ai_selected_intent_model"
-                    value="{{ ai_probe_state.selected_models.intent or '' }}"
-                  />
-                  <input
-                    type="hidden"
-                    id="ai_selected_rerank_model"
-                    name="ai_selected_rerank_model"
-                    value="{{ ai_probe_state.selected_models.rerank or '' }}"
-                  />
-                  <input
-                    type="hidden"
-                    id="ai_selected_translate_model"
-                    name="ai_selected_translate_model"
-                    value="{{ ai_probe_state.selected_models.translate or '' }}"
-                  />
-                  <input
-                    type="hidden"
-                    id="ai_selected_site_info_model"
-                    name="ai_selected_site_info_model"
-                    value="{{ ai_probe_state.selected_models.site_info or '' }}"
-                  />
-                  <input
-                    type="hidden"
-                    id="ai_selected_fallback_model"
-                    name="ai_selected_fallback_model"
-                    value="{{ ai_probe_state.selected_models.fallback or '' }}"
-                  />
-                  <input
-                    type="hidden"
-                    id="ai_model_probe_last_at"
-                    name="ai_model_probe_last_at"
-                    value="{{ ai_probe_state.probe_last_at or '' }}"
-                  />
-                  <input
-                    type="hidden"
-                    id="ai_model_probe_signature"
-                    name="ai_model_probe_signature"
-                    value="{{ ai_probe_state.probe_signature or '' }}"
-                  />
-
-                  <!-- 启用开关（两列布局） -->
-                  <div class="row mb-3">
-                    <div class="col-6">
-                      <div
-                        class="d-flex justify-content-between align-items-center mb-2"
-                      >
-                        <label class="form-label fw-bold mb-0"
-                          >启用AI搜索</label
-                        >
-                        <div class="form-check form-switch">
-                          {{ form.ai_search_enabled(class="form-check-input") }}
-                          <label
-                            class="form-check-label"
-                            for="ai_search_enabled"
-                          >
-                            {% if settings.ai_search_enabled %}已启用{% else
-                            %}已关闭{% endif %}
-                          </label>
+                  <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body d-flex flex-column">
+                      <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                        <div>
+                          <h6 class="mb-1">
+                            <i class="bi bi-robot me-2"></i>AI搜索配置
+                          </h6>
+                          <div class="text-muted small">
+                            多提供方轮询兜底，四项任务可分别绑定不同模型。
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <div class="col-6">
-                      <div
-                        class="d-flex justify-content-between align-items-center mb-2"
-                      >
-                        <label class="form-label fw-bold mb-0">允许匿名</label>
-                        <div class="form-check form-switch">
-                          {{
-                          form.ai_search_allow_anonymous(class="form-check-input",
-                          id="ai_search_allow_anonymous") }}
-                          <label
-                            class="form-check-label"
-                            for="ai_search_allow_anonymous"
+                        <div class="d-flex flex-wrap gap-2 justify-content-end">
+                          <button
+                            type="button"
+                            id="aiMgrDetectAllBtn"
+                            class="btn btn-primary btn-sm"
                           >
-                            {% if settings.ai_search_allow_anonymous %}已允许{%
-                            else %}已禁止{% endif %}
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label fw-bold">API基础URL</label>
-                    {{ form.ai_api_base_url(class="form-control",
-                    placeholder="https://api.openai.com") }} {% if
-                    form.ai_api_base_url.errors %} {% for error in
-                    form.ai_api_base_url.errors %}
-                    <div class="text-danger">{{ error }}</div>
-                    {% endfor %} {% endif %}
-                    <div class="form-text">
-                      例如: https://api.openai.com 或 https://api.example.com
-                    </div>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label fw-bold">API密钥</label>
-                    <input
-                      type="password"
-                      class="form-control"
-                      id="ai_api_key"
-                      name="ai_api_key"
-                      placeholder="sk-..."
-                      value="{{ form.ai_api_key.data if form.ai_api_key.data else '' }}"
-                    />
-                    {% if form.ai_api_key.errors %} {% for error in
-                    form.ai_api_key.errors %}
-                    <div class="text-danger">{{ error }}</div>
-                    {% endfor %} {% endif %}
-                    <div class="form-text">
-                      {% if settings.ai_api_key %}
-                      <span class="text-success"
-                        ><i class="bi bi-check-circle me-1"></i
-                        >已配置密钥（显示为掩码）</span
-                      >，留空则不修改，输入新密钥则更新 {% else %}
-                      留空则不修改现有密钥。请妥善保管您的API密钥。 {% endif %}
-                    </div>
-                  </div>
-
-                  <div class="card shadow-sm border-0 ai-auto-model-card mb-3">
-                    <div class="card-body p-3">
-                      <div
-                        class="d-flex flex-wrap justify-content-between align-items-start gap-2"
-                      >
-                        <label class="form-label fw-bold mb-0"
-                          >自动模型选型</label
-                        >
-                        <div class="form-check form-switch ai-header-switch">
-                          <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="ai_auto_model_selection_enabled"
-                            name="ai_auto_model_selection_enabled"
-                            value="1"
-                            {% if ai_probe_state.auto_enabled %}checked{% endif %}
-                          />
-                          <label
-                            class="form-check-label"
-                            for="ai_auto_model_selection_enabled"
+                            <i class="bi bi-stars me-2"></i>自动模型选型
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#aiProvidersModal"
                           >
-                            {% if ai_probe_state.auto_enabled %}自动{% else %}手动{% endif %}
-                          </label>
+                            <i class="bi bi-plug me-2"></i>提供方配置
+                          </button>
                         </div>
                       </div>
 
-                      <div class="d-flex flex-wrap gap-2 my-3">
+                      <div class="row g-2 mb-3">
+                        <div class="col-6">
+                          <div class="ai-mgr-switch-card">
+                            <div>
+                              <div class="fw-semibold small">启用AI搜索</div>
+                              <div class="text-muted ai-mgr-switch-hint">关闭后运行时不会使用 AI</div>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                              {{ form.ai_search_enabled(class="form-check-input") }}
+                              <label class="form-check-label" for="ai_search_enabled">
+                                {% if settings.ai_search_enabled %}已启用{% else %}已关闭{% endif %}
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-6">
+                          <div class="ai-mgr-switch-card">
+                            <div>
+                              <div class="fw-semibold small">允许匿名</div>
+                              <div class="text-muted ai-mgr-switch-hint">仅对前台 AI 搜索生效</div>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                              {{ form.ai_search_allow_anonymous(class="form-check-input", id="ai_search_allow_anonymous") }}
+                              <label class="form-check-label" for="ai_search_allow_anonymous">
+                                {% if settings.ai_search_allow_anonymous %}已允许{% else %}已禁止{% endif %}
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div id="aiMgrSummary" class="d-flex flex-wrap gap-2 mb-3"></div>
+
+                      <div class="d-flex flex-wrap gap-2 mb-3">
                         <button
                           type="button"
-                          id="detectAiModels"
-                          class="btn btn-primary btn-sm"
+                          class="btn btn-outline-primary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiTaskBindingsModal"
                         >
-                          <i class="bi bi-stars me-2"></i>检测并推荐模型
+                          <i class="bi bi-diagram-3 me-2"></i>任务模型
                         </button>
                         <button
                           type="button"
-                          id="testAiConfig"
-                          class="btn btn-outline-primary btn-sm"
+                          class="btn btn-outline-secondary btn-sm"
+                          data-bs-toggle="modal"
+                          data-bs-target="#aiOverviewModal"
                         >
-                          <i class="bi bi-play-circle me-2"></i>测试当前模型
+                          <i class="bi bi-eye me-2"></i>查看配置
                         </button>
                         <button
                           type="button"
@@ -763,37 +677,211 @@
                         >
                           <i class="bi bi-sliders me-2"></i>高级设置
                         </button>
-                      </div>
-
-                      <div id="aiProbeSummary" class="ai-probe-summary mb-3"></div>
-                      <div
-                        id="testResult"
-                        class="mb-3"
-                        style="display: none"
-                      ></div>
-
-                      <div id="aiTaskModelGrid" class="row g-2"></div>
-
-                      <div
-                        class="d-flex justify-content-between align-items-center mt-3"
-                      >
-                        <span class="text-muted small"
-                          >当前任务模型与兼容性概览</span
-                        >
                         <button
                           type="button"
-                          class="btn btn-link btn-sm p-0 text-decoration-none"
-                          data-bs-toggle="collapse"
-                          data-bs-target="#aiProbeDetailsCollapse"
-                          aria-expanded="false"
-                          aria-controls="aiProbeDetailsCollapse"
+                          id="aiMgrRunTaskTestsBtn"
+                          class="btn btn-outline-success btn-sm"
                         >
-                          查看检测详情
+                          <i class="bi bi-activity me-2"></i>四项测试
                         </button>
                       </div>
 
-                      <div class="collapse mt-2" id="aiProbeDetailsCollapse">
-                        <div id="aiProbeDetails" class="ai-probe-details"></div>
+                      <div id="aiMgrFeedback" class="d-none mb-3"></div>
+                      <div id="aiTaskStatusGrid" class="row g-2"></div>
+                    </div>
+                  </div>
+
+                  <div
+                    class="modal fade"
+                    id="aiProvidersModal"
+                    tabindex="-1"
+                    aria-labelledby="aiProvidersModalLabel"
+                    aria-hidden="true"
+                  >
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5 class="modal-title" id="aiProvidersModalLabel">
+                            AI提供方配置
+                          </h5>
+                          <div class="d-flex gap-2 ms-auto me-3">
+                            <button
+                              type="button"
+                              class="btn btn-outline-primary btn-sm"
+                              id="aiMgrAddProviderBtn"
+                            >
+                              <i class="bi bi-plus-lg me-2"></i>添加提供方
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                          ></button>
+                        </div>
+                        <div class="modal-body">
+                          <div id="aiProvidersModalFeedback" class="d-none mb-3"></div>
+                          <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                              <thead>
+                                <tr>
+                                  <th>名称</th>
+                                  <th>URL</th>
+                                  <th>接口模式</th>
+                                  <th>检测状态</th>
+                                  <th>优先级</th>
+                                  <th class="text-end">操作</th>
+                                </tr>
+                              </thead>
+                              <tbody id="aiProvidersTableBody"></tbody>
+                            </table>
+                          </div>
+                          <div id="aiProvidersEmpty" class="ai-mgr-empty d-none mt-3">
+                            还没有配置AI提供方，先添加一个可用的 API 地址和密钥。
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    class="modal fade"
+                    id="aiProviderEditorModal"
+                    tabindex="-1"
+                    aria-labelledby="aiProviderEditorModalLabel"
+                    aria-hidden="true"
+                  >
+                    <div class="modal-dialog modal-dialog-centered">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5 class="modal-title" id="aiProviderEditorModalLabel">
+                            编辑提供方
+                          </h5>
+                          <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                          ></button>
+                        </div>
+                        <div class="modal-body">
+                          <div class="row g-3">
+                            <input type="hidden" id="aiProviderId" />
+                            <div class="col-12">
+                              <label class="form-label fw-bold">名称</label>
+                              <input type="text" class="form-control" id="aiProviderName" placeholder="例如：主线路 / 备用线路" />
+                            </div>
+                            <div class="col-12">
+                              <label class="form-label fw-bold">基础URL</label>
+                              <input type="url" class="form-control" id="aiProviderBaseUrl" placeholder="https://api.openai.com" />
+                            </div>
+                            <div class="col-12">
+                              <label class="form-label fw-bold">API Key</label>
+                              <input type="password" class="form-control" id="aiProviderApiKey" placeholder="留空表示编辑时沿用现有密钥" />
+                              <div class="form-text">编辑已有提供方时留空即可保留当前密钥。</div>
+                            </div>
+                            <div class="col-md-6">
+                              <label class="form-label fw-bold">接口模式</label>
+                              <select class="form-select" id="aiProviderInterfaceMode">
+                                <option value="auto">自动兜底</option>
+                                <option value="chat">Chat</option>
+                                <option value="responses">Responses</option>
+                              </select>
+                            </div>
+                            <div class="col-md-3">
+                              <label class="form-label fw-bold">优先级</label>
+                              <input type="number" class="form-control" id="aiProviderPriority" min="1" step="1" value="100" />
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                              <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="aiProviderEnabled" checked />
+                                <label class="form-check-label" for="aiProviderEnabled">启用</label>
+                              </div>
+                            </div>
+                          </div>
+                          <div id="aiProviderEditorFeedback" class="d-none mt-3"></div>
+                        </div>
+                        <div class="modal-footer">
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-bs-dismiss="modal"
+                          >
+                            取消
+                          </button>
+                          <button type="button" class="btn btn-primary btn-sm" id="aiProviderSaveBtn">
+                            保存提供方
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    class="modal fade"
+                    id="aiTaskBindingsModal"
+                    tabindex="-1"
+                    aria-labelledby="aiTaskBindingsModalLabel"
+                    aria-hidden="true"
+                  >
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5 class="modal-title" id="aiTaskBindingsModalLabel">
+                            四项任务模型配置
+                          </h5>
+                          <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                          ></button>
+                        </div>
+                        <div class="modal-body">
+                          <div class="text-muted small mb-3">
+                            每项任务可选择自动推荐，也可以手动指定某个提供方下的具体模型。
+                          </div>
+                          <div id="aiTaskBindingsRows" class="row g-3"></div>
+                          <div id="aiTaskBindingsFeedback" class="d-none mt-3"></div>
+                        </div>
+                        <div class="modal-footer">
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            data-bs-dismiss="modal"
+                          >
+                            关闭
+                          </button>
+                          <button type="button" class="btn btn-primary btn-sm" id="aiSaveTaskBindingsBtn">
+                            保存任务模型
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    class="modal fade"
+                    id="aiOverviewModal"
+                    tabindex="-1"
+                    aria-labelledby="aiOverviewModalLabel"
+                    aria-hidden="true"
+                  >
+                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                      <div class="modal-content">
+                        <div class="modal-header">
+                          <h5 class="modal-title" id="aiOverviewModalLabel">
+                            AI配置总览
+                          </h5>
+                          <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                          ></button>
+                        </div>
+                        <div class="modal-body" id="aiOverviewBody"></div>
                       </div>
                     </div>
                   </div>
@@ -808,11 +896,8 @@
                     <div class="modal-dialog modal-dialog-centered">
                       <div class="modal-content">
                         <div class="modal-header">
-                          <h5
-                            class="modal-title"
-                            id="aiAdvancedSettingsModalLabel"
-                          >
-                            AI 高级设置
+                          <h5 class="modal-title" id="aiAdvancedSettingsModalLabel">
+                            AI高级设置
                           </h5>
                           <button
                             type="button"
@@ -823,55 +908,20 @@
                         </div>
                         <div class="modal-body">
                           <div class="row g-3">
-                            <div class="col-lg-8">
-                              <label class="form-label fw-bold"
-                                >手动默认模型</label
-                              >
-                              {{ form.ai_model_name(class="form-control",
-                              placeholder="可留空，由系统自动选择") }} {% if
-                              form.ai_model_name.errors %} {% for error in
-                              form.ai_model_name.errors %}
-                              <div class="text-danger">{{ error }}</div>
-                              {% endfor %} {% endif %}
-                              <div class="form-text">
-                                仅在你想强制指定单一模型时填写。未填写时，系统会优先使用自动探测结果。
-                              </div>
-                            </div>
-                            <div class="col-lg-4">
-                              <label class="form-label fw-bold">接口模式</label>
-                              {{ form.ai_interface_mode(class="form-select") }}
-                              <div class="form-text">
-                                自动兜底会依次尝试 Chat、Chat 流式 和 Responses。
-                              </div>
-                            </div>
                             <div class="col-6">
                               <label class="form-label fw-bold">温度参数</label>
-                              {{ form.ai_temperature(class="form-control",
-                              placeholder="0.7", type="number", step="0.1", min="0",
-                              max="1") }} {% if form.ai_temperature.errors %} {%
-                              for error in form.ai_temperature.errors %}
-                              <div class="text-danger">{{ error }}</div>
-                              {% endfor %} {% endif %}
-                              <div class="form-text small">
-                                结构化任务会自动压低温度，减少 JSON 漂移。
-                              </div>
+                              {{ form.ai_temperature(class="form-control", placeholder="0.7", type="number", step="0.1", min="0", max="1") }}
+                              <div class="form-text small">结构化任务会自动压低温度，减少 JSON 漂移。</div>
                             </div>
                             <div class="col-6">
                               <label class="form-label fw-bold">最大Token数</label>
-                              {{ form.ai_max_tokens(class="form-control",
-                              type="number", min="100", max="2000") }} {% if
-                              form.ai_max_tokens.errors %} {% for error in
-                              form.ai_max_tokens.errors %}
-                              <div class="text-danger">{{ error }}</div>
-                              {% endfor %} {% endif %}
-                              <div class="form-text small">建议 500-1000</div>
+                              {{ form.ai_max_tokens(class="form-control", type="number", min="100", max="2000") }}
+                              <div class="form-text small">建议 500 到 1000。</div>
                             </div>
                           </div>
                         </div>
                         <div class="modal-footer">
-                          <span class="text-muted small me-auto"
-                            >修改后保存设置即可生效。</span
-                          >
+                          <span class="text-muted small me-auto">在本页点击“保存设置”后生效。</span>
                           <button
                             type="button"
                             class="btn btn-outline-secondary btn-sm"
@@ -1060,7 +1110,7 @@
                   </div>
 
                   <!-- 批量生成向量 -->
-                  {% if vector_configured %}
+                  {% if vector_configured and vector_indexing_available %}
                   <div class="card border-primary mb-3">
                     <div class="card-header bg-primary text-white py-2">
                       <i class="bi bi-database-add me-2"></i>批量生成向量索引
@@ -1165,6 +1215,11 @@
                       </div>
                       <div id="vectorIndexingMessage" class="mt-2 small"></div>
                     </div>
+                  </div>
+                  {% elif vector_configured %}
+                  <div class="alert alert-light border mb-3">
+                    <i class="bi bi-info-circle me-2"></i>
+                    当前环境未启用批量向量索引模块。
                   </div>
                   {% endif %}
                 </div>
@@ -1643,54 +1698,52 @@
 
     const aiTaskMeta = {
       intent: {
-        label: "搜索意图",
+        label: "搜索意图分析",
         description: "理解查询并提取关键词",
       },
       rerank: {
-        label: "搜索排序",
-        description: "推荐结果、排序与总结",
+        label: "搜索结果重排",
+        description: "推荐结果排序与总结",
       },
       translate: {
-        label: "描述翻译",
-        description: "将描述稳定翻译成中文",
+        label: "翻译",
+        description: "描述翻译与文本补全",
       },
       site_info: {
-        label: "网站补全",
-        description: "生成标题与描述候选",
+        label: "网站信息补全",
+        description: "生成标题和描述建议",
       },
     };
 
-    const detectAiModelsBtn = document.getElementById("detectAiModels");
-    const testAiConfigBtn = document.getElementById("testAiConfig");
-    const testResultDiv = document.getElementById("testResult");
-    const aiProbeSummary = document.getElementById("aiProbeSummary");
-    const aiTaskModelGrid = document.getElementById("aiTaskModelGrid");
-    const aiProbeDetails = document.getElementById("aiProbeDetails");
-    const aiAutoSwitch = document.getElementById(
-      "ai_auto_model_selection_enabled"
-    );
-    const aiAutoSwitchLabel = aiAutoSwitch
-      ? document.querySelector('label[for="ai_auto_model_selection_enabled"]')
+    let aiManagementState = {{ ai_management_state | tojson }};
+
+    const aiMgrSummary = document.getElementById("aiMgrSummary");
+    const aiMgrFeedback = document.getElementById("aiMgrFeedback");
+    const aiTaskStatusGrid = document.getElementById("aiTaskStatusGrid");
+    const aiDetectAllProvidersBtn = document.getElementById("aiMgrDetectAllBtn");
+    const aiRunTaskTestsBtn = document.getElementById("aiMgrRunTaskTestsBtn");
+    const aiTaskBindingsField = document.getElementById("ai_task_bindings_json");
+    const aiTaskTestResultsField = document.getElementById("ai_task_test_results_json");
+    const aiProvidersTableBody = document.getElementById("aiProvidersTableBody");
+    const aiProvidersEmpty = document.getElementById("aiProvidersEmpty");
+    const aiProvidersModalFeedback = document.getElementById("aiProvidersModalFeedback");
+    const aiProviderEditorFeedback = document.getElementById("aiProviderEditorFeedback");
+    const aiTaskBindingsRows = document.getElementById("aiTaskBindingsRows");
+    const aiTaskBindingsFeedback = document.getElementById("aiTaskBindingsFeedback");
+    const aiOverviewBody = document.getElementById("aiOverviewBody");
+    const aiProviderSaveBtn = document.getElementById("aiProviderSaveBtn");
+    const aiSaveTaskBindingsBtn = document.getElementById("aiSaveTaskBindingsBtn");
+    const aiMgrAddProviderBtn = document.getElementById("aiMgrAddProviderBtn");
+    const aiProviderEditorModalEl = document.getElementById("aiProviderEditorModal");
+    const aiProvidersModalEl = document.getElementById("aiProvidersModal");
+    const aiTaskBindingsModalEl = document.getElementById("aiTaskBindingsModal");
+    const aiOverviewModalEl = document.getElementById("aiOverviewModal");
+
+    const aiProviderEditorModal = aiProviderEditorModalEl && window.bootstrap
+      ? new bootstrap.Modal(aiProviderEditorModalEl)
       : null;
-    const aiManualModelInput = document.getElementById("ai_model_name");
-    const aiInterfaceModeInput = document.getElementById("ai_interface_mode");
-    const aiModelCatalogField = document.getElementById("ai_model_catalog_json");
-    const aiProbeErrorField = document.getElementById("ai_model_probe_error");
-    const aiProbeLastAtField = document.getElementById("ai_model_probe_last_at");
-    const aiProbeSignatureField = document.getElementById(
-      "ai_model_probe_signature"
-    );
-    const aiSelectedFields = {
-      intent: document.getElementById("ai_selected_intent_model"),
-      rerank: document.getElementById("ai_selected_rerank_model"),
-      translate: document.getElementById("ai_selected_translate_model"),
-      site_info: document.getElementById("ai_selected_site_info_model"),
-      fallback: document.getElementById("ai_selected_fallback_model"),
-    };
 
-    let currentAiProbeState = {{ ai_probe_state | tojson }};
-
-    function escapeHtml(value) {
+    function aiEscapeHtml(value) {
       return String(value || "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -1699,186 +1752,128 @@
         .replace(/'/g, "&#39;");
     }
 
-    function syncAiAutoSwitchLabel() {
-      if (!aiAutoSwitchLabel || !aiAutoSwitch) {
-        return;
-      }
-      aiAutoSwitchLabel.textContent = aiAutoSwitch.checked ? "自动" : "手动";
+    function aiCsrfToken() {
+      const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+      return csrfTokenMeta ? csrfTokenMeta.getAttribute("content") : "";
     }
 
-    function computeEffectiveAiModels(state) {
-      const selectedModels = state.selected_models || {};
-      const manualModel = (state.manual_model_name || "").trim();
-      const autoEnabled = !!state.auto_enabled;
-      const effectiveModels = {};
-
-      Object.keys(aiTaskMeta).forEach((taskKey) => {
-        const taskModel = (selectedModels[taskKey] || "").trim();
-        const fallbackModel = (selectedModels.fallback || "").trim();
-        effectiveModels[taskKey] = autoEnabled
-          ? taskModel || fallbackModel || manualModel || ""
-          : manualModel || "";
-      });
-
-      return effectiveModels;
-    }
-
-    function getAiTaskSource(taskKey, state, effectiveModels) {
-      const selectedModels = state.selected_models || {};
-      const manualModel = (state.manual_model_name || "").trim();
-      const effectiveModel = (effectiveModels[taskKey] || "").trim();
-
-      if (!effectiveModel) {
-        return { label: "未分配", badge: "text-bg-secondary" };
-      }
-      if (!state.auto_enabled) {
-        return { label: "手动默认", badge: "text-bg-dark" };
-      }
-      if ((selectedModels[taskKey] || "").trim()) {
-        return { label: "自动推荐", badge: "text-bg-primary" };
-      }
-      if (
-        (selectedModels.fallback || "").trim() &&
-        effectiveModel === (selectedModels.fallback || "").trim()
-      ) {
-        return { label: "自动回退", badge: "text-bg-warning" };
-      }
-      if (manualModel && effectiveModel === manualModel) {
-        return { label: "手动默认", badge: "text-bg-secondary" };
-      }
-      return { label: "当前生效", badge: "text-bg-secondary" };
-    }
-
-    function syncAiProbeFields(state) {
-      if (!state) {
+    function aiShowFeedback(target, level, message, keepVisible) {
+      if (!target) {
         return;
       }
-
-      const selectedModels = state.selected_models || {};
-      if (aiModelCatalogField) {
-        aiModelCatalogField.value = JSON.stringify(state.catalog || []);
+      const levelClass = {
+        success: "alert-success",
+        danger: "alert-danger",
+        warning: "alert-warning",
+        info: "alert-info",
+      }[level] || "alert-info";
+      target.classList.remove("d-none");
+      target.innerHTML = `<div class="alert ${levelClass} mb-0">${aiEscapeHtml(message)}</div>`;
+      if (!keepVisible) {
+        window.clearTimeout(target._hideTimer);
+        target._hideTimer = window.setTimeout(() => {
+          target.classList.add("d-none");
+        }, 5000);
       }
-      if (aiProbeErrorField) {
-        aiProbeErrorField.value = state.probe_error || "";
-      }
-      if (aiProbeLastAtField) {
-        aiProbeLastAtField.value = state.probe_last_at || "";
-      }
-      if (aiProbeSignatureField) {
-        aiProbeSignatureField.value = state.probe_signature || "";
-      }
-
-      Object.entries(aiSelectedFields).forEach(([key, field]) => {
-        if (field) {
-          field.value = selectedModels[key] || "";
-        }
-      });
     }
 
-    function renderAiProbeSummary(state) {
-      if (!aiProbeSummary) {
-        return;
+    function aiUpdateHiddenState() {
+      if (aiTaskBindingsField) {
+        aiTaskBindingsField.value = JSON.stringify(aiManagementState.task_bindings || {});
       }
-
-      const stats = state.stats || {};
-      const chips = [];
-
-      const interfaceMode = (state.interface_mode || "auto").trim();
-      const interfaceModeText = {
-        auto: "自动兜底",
-        chat: "Chat",
-        responses: "Responses",
-      }[interfaceMode] || "自动兜底";
-
-        if (stats.total_models) {
-          chips.push(
-            `<span class="ai-inline-chip">已发现 ${stats.total_models} 个模型</span>`
-          );
-          chips.push(
-            `<span class="ai-inline-chip">适配 ${stats.compatible_models || 0} 个</span>`
-          );
-          if (stats.partial_models) {
-            chips.push(
-              `<span class="ai-inline-chip">部分兼容 ${stats.partial_models}</span>`
-            );
-          }
-        } else {
-          chips.push(
-            '<span class="ai-inline-chip">尚未检测模型</span>'
-          );
-        }
-
-        chips.push(
-          `<span class="ai-inline-chip">接口模式 ${escapeHtml(interfaceModeText)}</span>`
-        );
-
-        if (state.probe_last_at) {
-          chips.push(
-            `<span class="ai-inline-chip">最近检测 ${escapeHtml(
-              state.probe_last_at.replace("T", " ").slice(0, 16)
-            )}</span>`
-          );
+      if (aiTaskTestResultsField) {
+        aiTaskTestResultsField.value = JSON.stringify(aiManagementState.task_test_results || {});
       }
-
-      if (state.probe_stale) {
-        chips.push(
-          '<span class="badge text-bg-warning">结果已过期，请重新检测</span>'
-        );
-      }
-
-      aiProbeSummary.innerHTML = `
-        <div class="d-flex flex-wrap gap-2">${chips.join("")}</div>
-        ${
-          state.probe_error
-            ? `<div class="small text-danger mt-2">${escapeHtml(
-                state.probe_error
-              )}</div>`
-            : ""
-        }
-      `;
     }
 
-    function renderAiTaskCards(state) {
-      if (!aiTaskModelGrid) {
+    function aiGetProviders() {
+      return Array.isArray(aiManagementState.providers) ? aiManagementState.providers : [];
+    }
+
+    function aiGetProvider(providerId) {
+      return aiGetProviders().find((provider) => Number(provider.id) === Number(providerId)) || null;
+    }
+
+    function aiTaskModeLabel(mode) {
+      return mode === "manual" ? "手动指定" : "自动推荐";
+    }
+
+    function aiStatusMeta(status) {
+      if (status === "success") {
+        return { className: "success", text: "已通过" };
+      }
+      if (status === "error") {
+        return { className: "error", text: "失败" };
+      }
+      return { className: "idle", text: "未测试" };
+    }
+
+    function aiRecommendedBadge(binding, effectiveTask) {
+      if ((binding.mode || "auto") === "manual") {
+        return "手动";
+      }
+      if ((effectiveTask.source || "") === "legacy") {
+        return "兼容";
+      }
+      return "自动";
+    }
+
+    function aiRenderSummary() {
+      if (!aiMgrSummary) {
         return;
       }
+      const summary = aiManagementState.summary || {};
+      const providers = aiGetProviders();
+      const successCount = Object.values(aiManagementState.task_test_results || {}).filter(
+        (item) => (item.status || "idle") === "success"
+      ).length;
+      const chips = [
+        `${summary.provider_count || providers.length || 0} 个提供方`,
+        `${summary.enabled_provider_count || 0} 个已启用`,
+        `${summary.detected_provider_count || 0} 个已检测`,
+        `${successCount}/4 项测试通过`,
+      ];
+      aiMgrSummary.innerHTML = chips
+        .map((item) => `<span class="ai-mgr-chip">${aiEscapeHtml(item)}</span>`)
+        .join("");
+    }
 
-      const effectiveModels = computeEffectiveAiModels(state);
-      const hasEffectiveModels = Object.values(effectiveModels).some(
-        (value) => (value || "").trim()
-      );
-
-      if (!hasEffectiveModels) {
-        aiTaskModelGrid.innerHTML = `
-          <div class="col-12">
-            <div class="ai-task-model-empty">
-              <div class="fw-semibold mb-1">尚未生成任务模型方案</div>
-              <div class="small text-muted">
-                点击“检测并推荐模型”后，这里会显示搜索意图、搜索排序、描述翻译和网站补全分别使用的模型。
-              </div>
-            </div>
-          </div>
-        `;
+    function aiRenderTaskCards() {
+      if (!aiTaskStatusGrid) {
         return;
       }
+      const bindings = aiManagementState.task_bindings || {};
+      const results = aiManagementState.task_test_results || {};
+      const effectiveTasks = aiManagementState.effective_tasks || {};
 
-      aiTaskModelGrid.innerHTML = Object.entries(aiTaskMeta)
+      aiTaskStatusGrid.innerHTML = Object.entries(aiTaskMeta)
         .map(([taskKey, meta]) => {
-          const modelName = effectiveModels[taskKey];
-          const source = getAiTaskSource(taskKey, state, effectiveModels);
+          const binding = bindings[taskKey] || { mode: "auto", provider_id: null, model_name: "" };
+          const result = results[taskKey] || { status: "idle", message: "" };
+          const effectiveTask = effectiveTasks[taskKey] || {};
+          const statusMeta = aiStatusMeta(result.status || "idle");
+          const providerName = effectiveTask.provider_name || (binding.provider_id ? (aiGetProvider(binding.provider_id) || {}).name : "");
+          const modelName = effectiveTask.model_name || binding.model_name || "未设置";
+          const protocolText = result.protocol ? ` · ${result.protocol}` : "";
+          const testedAt = result.tested_at ? result.tested_at.replace("T", " ").slice(0, 16) : "未测试";
+
           return `
             <div class="col-6">
-              <div class="ai-task-model-card">
-                <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="ai-mgr-task-card">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                   <div>
-                    <div class="ai-task-model-label">${meta.label}</div>
-                    <div class="ai-task-model-description">${meta.description}</div>
+                    <div class="ai-mgr-task-title">${meta.label}</div>
+                    <div class="ai-mgr-task-desc">${meta.description}</div>
                   </div>
-                  <span class="badge ${source.badge}">${source.label}</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="ai-mgr-status-light ${statusMeta.className}"></span>
+                    <span class="badge text-bg-light">${aiRecommendedBadge(binding, effectiveTask)}</span>
+                  </div>
                 </div>
-                <div class="ai-task-model-name ${
-                  modelName ? "" : "text-muted"
-                }">${escapeHtml(modelName || "未分配")}</div>
+                <div class="ai-mgr-task-main">${aiEscapeHtml(modelName)}</div>
+                <div class="ai-mgr-task-sub">${aiEscapeHtml(providerName || "未命中提供方")}</div>
+                <div class="ai-mgr-task-meta mt-2">${aiEscapeHtml(aiTaskModeLabel(binding.mode || "auto"))} · ${aiEscapeHtml(statusMeta.text)}${aiEscapeHtml(protocolText)}</div>
+                <div class="ai-mgr-task-message mt-1">${aiEscapeHtml(result.message || testedAt)}</div>
               </div>
             </div>
           `;
@@ -1886,278 +1881,550 @@
         .join("");
     }
 
-    function renderAiProbeDetails(state) {
-      if (!aiProbeDetails) {
+    function aiProviderStatsText(provider) {
+      const stats = provider.stats || {};
+      if (!stats.total_models) {
+        return provider.probe_error ? "检测失败" : "未检测";
+      }
+      return `适配 ${stats.compatible_models || 0}/${stats.total_models || 0}`;
+    }
+
+    function aiRenderProvidersTable() {
+      if (!aiProvidersTableBody || !aiProvidersEmpty) {
         return;
       }
-
-      const catalog = Array.isArray(state.catalog) ? state.catalog : [];
-      if (!catalog.length) {
-        aiProbeDetails.innerHTML =
-          '<div class="small text-muted py-2">尚未执行模型检测。点击“检测并推荐模型”后，这里会展示各模型的兼容性详情。</div>';
-        return;
-      }
-
-      const statusLabelMap = {
-        good: ["适合当前项目", "text-bg-success"],
-        partial: ["部分兼容", "text-bg-warning"],
-        bad: ["不推荐", "text-bg-danger"],
-        skipped: ["已跳过", "text-bg-secondary"],
-      };
-
-      aiProbeDetails.innerHTML = `
-        <div class="ai-probe-list">
-          ${catalog
-            .map((item) => {
-              const [statusText, statusClass] =
-                statusLabelMap[item.project_fit] || statusLabelMap.skipped;
-              const capabilityChips = [];
-              if (item.supports_text) {
-                capabilityChips.push(
-                  '<span class="ai-inline-chip">文本输出</span>'
-                );
-              }
-              if (item.supports_json) {
-                capabilityChips.push(
-                  '<span class="ai-inline-chip">JSON 输出</span>'
-                );
-              }
-              if (item.supports_json_mode) {
-                capabilityChips.push(
-                  '<span class="ai-inline-chip">JSON Mode</span>'
-                );
-              }
-              if (item.text_protocol) {
-                capabilityChips.push(
-                  `<span class="ai-inline-chip">文本 ${escapeHtml(
-                    item.text_protocol
-                  )}</span>`
-                );
-              }
-              if (item.json_protocol) {
-                capabilityChips.push(
-                  `<span class="ai-inline-chip">结构化 ${escapeHtml(
-                    item.json_protocol
-                  )}</span>`
-                );
-              }
-              if (item.latency_ms) {
-                capabilityChips.push(
-                  `<span class="ai-inline-chip">${item.latency_ms} ms</span>`
-                );
-              }
-
-              const issueText =
-                item.skip_reason ||
-                item.json_error ||
-                item.text_error ||
-                item.text_preview ||
-                item.json_preview ||
-                "";
-
-              return `
-                <div class="ai-probe-item">
-                  <div class="d-flex justify-content-between align-items-start gap-2">
-                    <div>
-                      <div class="fw-semibold">${escapeHtml(item.id || "")}</div>
-                      <div class="small text-muted">${escapeHtml(
-                        item.owned_by || "未知提供方"
-                      )}</div>
-                    </div>
-                    <span class="badge ${statusClass}">${statusText}</span>
-                  </div>
-                  <div class="d-flex flex-wrap gap-2 mt-2">
-                    ${capabilityChips.join("")}
-                  </div>
-                  ${
-                    issueText
-                      ? `<div class="small text-muted mt-2">${escapeHtml(
-                          issueText
-                        )}</div>`
-                      : ""
-                  }
+      const providers = aiGetProviders();
+      aiProvidersEmpty.classList.toggle("d-none", providers.length > 0);
+      aiProvidersTableBody.innerHTML = providers
+        .map((provider) => {
+          const modeLabel = {
+            auto: "自动兜底",
+            chat: "Chat",
+            responses: "Responses",
+          }[provider.interface_mode || "auto"] || "自动兜底";
+          const statusBadge = provider.enabled
+            ? '<span class="badge text-bg-success">启用</span>'
+            : '<span class="badge text-bg-secondary">停用</span>';
+          const probeBadge = provider.stats && provider.stats.total_models
+            ? `<span class="badge text-bg-light">${aiEscapeHtml(aiProviderStatsText(provider))}</span>`
+            : '<span class="badge text-bg-light">未检测</span>';
+          return `
+            <tr>
+              <td>
+                <div class="fw-semibold">${aiEscapeHtml(provider.name || "默认 AI 提供方")}</div>
+                <div class="small text-muted">${aiEscapeHtml(provider.api_key_masked || "未保存密钥")}</div>
+              </td>
+              <td class="small text-break">${aiEscapeHtml(provider.api_base_url || "")}</td>
+              <td>${aiEscapeHtml(modeLabel)}</td>
+              <td>
+                <div class="d-flex flex-wrap gap-2">
+                  ${statusBadge}
+                  ${probeBadge}
                 </div>
-              `;
-            })
-            .join("")}
+              </td>
+              <td>${aiEscapeHtml(String(provider.priority || 100))}</td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                  <button type="button" class="btn btn-outline-secondary" data-action="edit" data-provider-id="${provider.id}">编辑</button>
+                  <button type="button" class="btn btn-outline-primary" data-action="detect" data-provider-id="${provider.id}">检测</button>
+                  <button type="button" class="btn btn-outline-success" data-action="test" data-provider-id="${provider.id}">测试</button>
+                  <button type="button" class="btn btn-outline-danger" data-action="delete" data-provider-id="${provider.id}">删除</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function aiProviderModelOptions(provider, selectedModel, taskKey) {
+      const options = ['<option value="">请选择模型</option>'];
+      const seen = new Set();
+      const recommended = (provider && provider.recommended_models) || {};
+      const recommendedSet = new Set([recommended[taskKey], recommended.fallback].filter((item) => !!item));
+      const catalog = provider && Array.isArray(provider.catalog) ? provider.catalog : [];
+      catalog.forEach((item) => {
+        const modelId = (item && item.id) || "";
+        if (!modelId || seen.has(modelId)) {
+          return;
+        }
+        seen.add(modelId);
+        const suffix = recommendedSet.has(modelId) ? " (推荐)" : "";
+        options.push(
+          `<option value="${aiEscapeHtml(modelId)}" ${modelId === selectedModel ? "selected" : ""}>${aiEscapeHtml(modelId + suffix)}</option>`
+        );
+      });
+      if (selectedModel && !seen.has(selectedModel)) {
+        options.push(
+          `<option value="${aiEscapeHtml(selectedModel)}" selected>${aiEscapeHtml(selectedModel)} (当前值)</option>`
+        );
+      }
+      return options.join("");
+    }
+
+    function aiRenderTaskBindingsModal() {
+      if (!aiTaskBindingsRows) {
+        return;
+      }
+      const bindings = aiManagementState.task_bindings || {};
+      const providers = aiGetProviders();
+      aiTaskBindingsRows.innerHTML = Object.entries(aiTaskMeta)
+        .map(([taskKey, meta]) => {
+          const binding = bindings[taskKey] || { mode: "auto", provider_id: null, model_name: "" };
+          const provider = aiGetProvider(binding.provider_id);
+          const providerOptions = ['<option value="">请选择提供方</option>']
+            .concat(
+              providers.map((item) => {
+                const text = `${item.name || "默认提供方"}${item.enabled ? "" : "（已停用）"}`;
+                return `<option value="${item.id}" ${Number(item.id) === Number(binding.provider_id) ? "selected" : ""}>${aiEscapeHtml(text)}</option>`;
+              })
+            )
+            .join("");
+          const modelOptions = aiProviderModelOptions(provider, binding.model_name || "", taskKey);
+          const manual = (binding.mode || "auto") === "manual";
+          return `
+            <div class="col-6">
+              <div class="ai-mgr-binding-card" data-task-key="${taskKey}">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                  <div>
+                    <div class="fw-semibold">${meta.label}</div>
+                    <div class="small text-muted">${meta.description}</div>
+                  </div>
+                  <span class="badge text-bg-light">${aiEscapeHtml(taskKey)}</span>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small fw-bold">模式</label>
+                  <select class="form-select form-select-sm ai-mgr-binding-mode" data-task-key="${taskKey}">
+                    <option value="auto" ${manual ? "" : "selected"}>自动推荐</option>
+                    <option value="manual" ${manual ? "selected" : ""}>手动指定</option>
+                  </select>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small fw-bold">提供方</label>
+                  <select class="form-select form-select-sm ai-mgr-binding-provider" data-task-key="${taskKey}" ${manual ? "" : "disabled"}>
+                    ${providerOptions}
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label small fw-bold">模型</label>
+                  <select class="form-select form-select-sm ai-mgr-binding-model" data-task-key="${taskKey}" ${manual ? "" : "disabled"}>
+                    ${modelOptions}
+                  </select>
+                  <div class="form-text small">未检测到模型时，先到“提供方配置”里执行检测。</div>
+                </div>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function aiRenderOverviewModal() {
+      if (!aiOverviewBody) {
+        return;
+      }
+      const providers = aiGetProviders();
+      const bindings = aiManagementState.task_bindings || {};
+      const effectiveTasks = aiManagementState.effective_tasks || {};
+      const taskResults = aiManagementState.task_test_results || {};
+      aiOverviewBody.innerHTML = `
+        <div class="mb-3">
+          <div class="fw-semibold mb-2">提供方概览</div>
+          <div class="d-flex flex-wrap gap-2">
+            ${providers.length ? providers.map((provider) => `<span class="ai-mgr-chip">${aiEscapeHtml(provider.name || "默认提供方")} · ${aiEscapeHtml(aiProviderStatsText(provider))}</span>`).join("") : '<span class="text-muted small">尚未配置提供方</span>'}
+          </div>
+        </div>
+        <div>
+          <div class="fw-semibold mb-2">任务生效情况</div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>任务</th>
+                  <th>模式</th>
+                  <th>提供方</th>
+                  <th>模型</th>
+                  <th>测试状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Object.entries(aiTaskMeta).map(([taskKey, meta]) => {
+                  const binding = bindings[taskKey] || { mode: "auto" };
+                  const effective = effectiveTasks[taskKey] || {};
+                  const result = taskResults[taskKey] || { status: "idle", message: "" };
+                  return `
+                    <tr>
+                      <td>${meta.label}</td>
+                      <td>${aiEscapeHtml(aiTaskModeLabel(binding.mode || "auto"))}</td>
+                      <td>${aiEscapeHtml(effective.provider_name || "-")}</td>
+                      <td class="text-break">${aiEscapeHtml(effective.model_name || binding.model_name || "-")}</td>
+                      <td>${aiEscapeHtml(result.message || aiStatusMeta(result.status || "idle").text)}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
         </div>
       `;
     }
 
-    function renderAiProbeState() {
-      if (!currentAiProbeState) {
+    function aiRenderAll() {
+      aiUpdateHiddenState();
+      aiRenderSummary();
+      aiRenderTaskCards();
+      aiRenderProvidersTable();
+      aiRenderTaskBindingsModal();
+      aiRenderOverviewModal();
+    }
+
+    function aiApplyState(nextState) {
+      if (!nextState || typeof nextState !== "object") {
         return;
       }
-
-      currentAiProbeState.auto_enabled = !!(
-        aiAutoSwitch && aiAutoSwitch.checked
-      );
-      currentAiProbeState.manual_model_name = aiManualModelInput
-        ? aiManualModelInput.value.trim()
-        : currentAiProbeState.manual_model_name || "";
-      currentAiProbeState.interface_mode = aiInterfaceModeInput
-        ? aiInterfaceModeInput.value.trim()
-        : currentAiProbeState.interface_mode || "auto";
-
-      syncAiAutoSwitchLabel();
-      syncAiProbeFields(currentAiProbeState);
-      renderAiProbeSummary(currentAiProbeState);
-      renderAiTaskCards(currentAiProbeState);
-      renderAiProbeDetails(currentAiProbeState);
+      aiManagementState = nextState;
+      aiRenderAll();
     }
 
-    if (aiAutoSwitch) {
-      aiAutoSwitch.addEventListener("change", renderAiProbeState);
+    function aiOpenProviderEditor(provider) {
+      document.getElementById("aiProviderId").value = provider && provider.id ? provider.id : "";
+      document.getElementById("aiProviderName").value = provider && provider.name ? provider.name : "";
+      document.getElementById("aiProviderBaseUrl").value = provider && provider.api_base_url ? provider.api_base_url : "";
+      document.getElementById("aiProviderApiKey").value = "";
+      document.getElementById("aiProviderInterfaceMode").value = provider && provider.interface_mode ? provider.interface_mode : "auto";
+      document.getElementById("aiProviderPriority").value = provider && provider.priority ? provider.priority : 100;
+      document.getElementById("aiProviderEnabled").checked = provider ? !!provider.enabled : true;
+      if (aiProviderEditorFeedback) {
+        aiProviderEditorFeedback.classList.add("d-none");
+      }
+      const titleEl = document.getElementById("aiProviderEditorModalLabel");
+      if (titleEl) {
+        titleEl.textContent = provider ? "编辑提供方" : "添加提供方";
+      }
+      if (aiProviderEditorModal) {
+        aiProviderEditorModal.show();
+      }
     }
-    if (aiManualModelInput) {
-      aiManualModelInput.addEventListener("input", renderAiProbeState);
+
+    function aiCollectTaskBindings() {
+      const bindings = {};
+      Object.keys(aiTaskMeta).forEach((taskKey) => {
+        const modeEl = document.querySelector(`.ai-mgr-binding-mode[data-task-key="${taskKey}"]`);
+        const providerEl = document.querySelector(`.ai-mgr-binding-provider[data-task-key="${taskKey}"]`);
+        const modelEl = document.querySelector(`.ai-mgr-binding-model[data-task-key="${taskKey}"]`);
+        const mode = modeEl ? modeEl.value : "auto";
+        const providerId = providerEl && providerEl.value ? Number(providerEl.value) : null;
+        bindings[taskKey] = {
+          mode: mode === "manual" ? "manual" : "auto",
+          provider_id: mode === "manual" ? providerId : null,
+          model_name: mode === "manual" && modelEl ? modelEl.value : "",
+        };
+      });
+      return bindings;
     }
-    if (aiInterfaceModeInput) {
-      aiInterfaceModeInput.addEventListener("change", renderAiProbeState);
+
+    function aiRefreshTaskBindingModels(taskKey) {
+      const providerEl = document.querySelector(`.ai-mgr-binding-provider[data-task-key="${taskKey}"]`);
+      const modelEl = document.querySelector(`.ai-mgr-binding-model[data-task-key="${taskKey}"]`);
+      if (!providerEl || !modelEl) {
+        return;
+      }
+      const provider = aiGetProvider(providerEl.value);
+      const selectedModel = modelEl.value || "";
+      modelEl.innerHTML = aiProviderModelOptions(provider, selectedModel, taskKey);
     }
 
-    renderAiProbeState();
+    if (aiMgrAddProviderBtn) {
+      aiMgrAddProviderBtn.addEventListener("click", function () {
+        aiOpenProviderEditor(null);
+      });
+    }
 
-    if (detectAiModelsBtn) {
-      detectAiModelsBtn.addEventListener("click", function () {
-        const apiBaseUrl = document
-          .getElementById("ai_api_base_url")
-          .value.trim();
-        const apiKeyInput = document.getElementById("ai_api_key").value.trim();
-        const modelName = aiManualModelInput
-          ? aiManualModelInput.value.trim()
-          : "";
-        const interfaceMode = aiInterfaceModeInput
-          ? aiInterfaceModeInput.value.trim()
-          : "auto";
+    if (aiProviderSaveBtn) {
+      aiProviderSaveBtn.addEventListener("click", function () {
+        const payload = {
+          id: document.getElementById("aiProviderId").value || null,
+          name: document.getElementById("aiProviderName").value.trim(),
+          api_base_url: document.getElementById("aiProviderBaseUrl").value.trim(),
+          api_key: document.getElementById("aiProviderApiKey").value.trim(),
+          interface_mode: document.getElementById("aiProviderInterfaceMode").value,
+          enabled: document.getElementById("aiProviderEnabled").checked,
+          priority: Number(document.getElementById("aiProviderPriority").value || 100),
+        };
 
-        detectAiModelsBtn.disabled = true;
-        detectAiModelsBtn.innerHTML =
-          '<i class="bi bi-hourglass-split me-2"></i>检测中...';
-        testResultDiv.innerHTML =
-          '<div class="alert alert-info mb-0">正在拉取模型列表并检测兼容性，这可能需要十几秒。</div>';
-        testResultDiv.style.display = "block";
-
-        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
-        const csrfToken = csrfTokenMeta
-          ? csrfTokenMeta.getAttribute("content")
-          : "";
-
-        fetch("{{ url_for('admin.detect_ai_models') }}", {
+        aiProviderSaveBtn.disabled = true;
+        fetch("{{ url_for('admin.save_ai_provider') }}", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-CSRFToken": csrfToken,
+            "X-CSRFToken": aiCsrfToken(),
           },
-          body: JSON.stringify({
-            api_base_url: apiBaseUrl,
-            api_key: apiKeyInput,
-            model_name: modelName,
-            interface_mode: interfaceMode,
-            auto_enabled: !!(aiAutoSwitch && aiAutoSwitch.checked),
-          }),
+          body: JSON.stringify(payload),
         })
           .then((response) => response.json())
           .then((data) => {
             if (data.success) {
-              currentAiProbeState = data.probe_state || {};
-              currentAiProbeState.manual_model_name = modelName;
-              currentAiProbeState.auto_enabled = !!(
-                aiAutoSwitch && aiAutoSwitch.checked
+              aiApplyState(data.state || aiManagementState);
+              aiShowFeedback(aiProvidersModalFeedback, "success", data.message, true);
+              if (aiProviderEditorModal) {
+                aiProviderEditorModal.hide();
+              }
+            } else {
+              aiShowFeedback(aiProviderEditorFeedback, "danger", data.message, true);
+            }
+          })
+          .catch((error) => {
+            aiShowFeedback(aiProviderEditorFeedback, "danger", `保存失败: ${error.message}`, true);
+          })
+          .finally(() => {
+            aiProviderSaveBtn.disabled = false;
+          });
+      });
+    }
+
+    if (aiProvidersTableBody) {
+      aiProvidersTableBody.addEventListener("click", function (event) {
+        const button = event.target.closest("button[data-action]");
+        if (!button) {
+          return;
+        }
+        const providerId = Number(button.getAttribute("data-provider-id"));
+        const provider = aiGetProvider(providerId);
+        const action = button.getAttribute("data-action");
+        if (!provider) {
+          return;
+        }
+
+        if (action === "edit") {
+          aiOpenProviderEditor(provider);
+          return;
+        }
+
+        if (action === "delete") {
+          if (!window.confirm(`确定删除提供方“${provider.name}”吗？`)) {
+            return;
+          }
+          fetch(`{{ url_for('admin.delete_ai_provider', provider_id=0) }}`.replace("/0/delete", `/${providerId}/delete`), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": aiCsrfToken(),
+            },
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              if (data.success) {
+                aiApplyState(data.state || aiManagementState);
+                aiShowFeedback(aiProvidersModalFeedback, "success", data.message, true);
+              } else {
+                aiShowFeedback(aiProvidersModalFeedback, "danger", data.message, true);
+              }
+            })
+            .catch((error) => {
+              aiShowFeedback(aiProvidersModalFeedback, "danger", `删除失败: ${error.message}`, true);
+            });
+          return;
+        }
+
+        if (action === "detect") {
+          button.disabled = true;
+          fetch(`{{ url_for('admin.detect_ai_provider_models', provider_id=0) }}`.replace("/0/detect", `/${providerId}/detect`), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": aiCsrfToken(),
+            },
+            body: JSON.stringify({}),
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              if (data.success) {
+                aiApplyState(data.state || aiManagementState);
+                aiShowFeedback(aiProvidersModalFeedback, "success", data.message, true);
+              } else {
+                aiShowFeedback(aiProvidersModalFeedback, "danger", data.message, true);
+              }
+            })
+            .catch((error) => {
+              aiShowFeedback(aiProvidersModalFeedback, "danger", `检测失败: ${error.message}`, true);
+            })
+            .finally(() => {
+              button.disabled = false;
+            });
+          return;
+        }
+
+        if (action === "test") {
+          button.disabled = true;
+          fetch(`{{ url_for('admin.test_ai_provider', provider_id=0) }}`.replace("/0/test", `/${providerId}/test`), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": aiCsrfToken(),
+            },
+            body: JSON.stringify({}),
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              aiShowFeedback(
+                aiProvidersModalFeedback,
+                data.success ? "success" : "danger",
+                data.message,
+                true
               );
-              currentAiProbeState.interface_mode = interfaceMode;
-              renderAiProbeState();
-              testResultDiv.innerHTML =
-                '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-2"></i>' +
-                data.message +
-                "</div>";
+            })
+            .catch((error) => {
+              aiShowFeedback(aiProvidersModalFeedback, "danger", `测试失败: ${error.message}`, true);
+            })
+            .finally(() => {
+              button.disabled = false;
+            });
+        }
+      });
+    }
+
+    if (aiDetectAllProvidersBtn) {
+      aiDetectAllProvidersBtn.addEventListener("click", function () {
+        aiDetectAllProvidersBtn.disabled = true;
+        aiShowFeedback(aiMgrFeedback, "info", "正在检测所有已启用提供方，并重新推荐模型...", true);
+        fetch("{{ url_for('admin.detect_all_ai_providers') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": aiCsrfToken(),
+          },
+          body: JSON.stringify({}),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.state) {
+              aiApplyState(data.state);
+            }
+            if (data.success) {
+              aiShowFeedback(aiMgrFeedback, "success", data.message, true);
             } else {
-              testResultDiv.innerHTML =
-                '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>' +
-                data.message +
-                "</div>";
+              const extra = Array.isArray(data.errors) && data.errors.length ? `；${data.errors.join("；")}` : "";
+              aiShowFeedback(aiMgrFeedback, "warning", `${data.message || "检测未完全成功"}${extra}`, true);
             }
           })
           .catch((error) => {
-            testResultDiv.innerHTML =
-              '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>模型检测失败: ' +
-              error.message +
-              "</div>";
+            aiShowFeedback(aiMgrFeedback, "danger", `检测失败: ${error.message}`, true);
           })
           .finally(() => {
-            detectAiModelsBtn.disabled = false;
-            detectAiModelsBtn.innerHTML =
-              '<i class="bi bi-stars me-2"></i>检测并推荐模型';
+            aiDetectAllProvidersBtn.disabled = false;
           });
       });
     }
 
-    if (testAiConfigBtn) {
-      testAiConfigBtn.addEventListener("click", function () {
-        const apiBaseUrl = document
-          .getElementById("ai_api_base_url")
-          .value.trim();
-        const apiKeyInput = document.getElementById("ai_api_key").value.trim();
-        const effectiveModels = computeEffectiveAiModels(currentAiProbeState || {});
-        const modelName =
-          effectiveModels.intent ||
-          (aiManualModelInput ? aiManualModelInput.value.trim() : "");
-        const interfaceMode = aiInterfaceModeInput
-          ? aiInterfaceModeInput.value.trim()
-          : "auto";
+    if (aiTaskBindingsRows) {
+      aiTaskBindingsRows.addEventListener("change", function (event) {
+        const modeEl = event.target.closest(".ai-mgr-binding-mode");
+        const providerEl = event.target.closest(".ai-mgr-binding-provider");
+        if (modeEl) {
+          const taskKey = modeEl.getAttribute("data-task-key");
+          const manual = modeEl.value === "manual";
+          const providerSelect = document.querySelector(`.ai-mgr-binding-provider[data-task-key="${taskKey}"]`);
+          const modelSelect = document.querySelector(`.ai-mgr-binding-model[data-task-key="${taskKey}"]`);
+          if (providerSelect) {
+            providerSelect.disabled = !manual;
+          }
+          if (modelSelect) {
+            modelSelect.disabled = !manual;
+          }
+          if (manual) {
+            aiRefreshTaskBindingModels(taskKey);
+          }
+          return;
+        }
+        if (providerEl) {
+          aiRefreshTaskBindingModels(providerEl.getAttribute("data-task-key"));
+        }
+      });
+    }
 
-        testAiConfigBtn.disabled = true;
-        testAiConfigBtn.innerHTML =
-          '<i class="bi bi-hourglass-split me-2"></i>测试中...';
-        testResultDiv.innerHTML =
-          '<div class="alert alert-info mb-0">正在测试当前生效模型...</div>';
-        testResultDiv.style.display = "block";
-
-        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
-        const csrfToken = csrfTokenMeta
-          ? csrfTokenMeta.getAttribute("content")
-          : "";
-
-        fetch("{{ url_for('admin.test_ai_config') }}", {
+    if (aiSaveTaskBindingsBtn) {
+      aiSaveTaskBindingsBtn.addEventListener("click", function () {
+        const bindings = aiCollectTaskBindings();
+        aiSaveTaskBindingsBtn.disabled = true;
+        fetch("{{ url_for('admin.save_ai_task_bindings') }}", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-CSRFToken": csrfToken,
+            "X-CSRFToken": aiCsrfToken(),
           },
-          body: JSON.stringify({
-            api_base_url: apiBaseUrl,
-            api_key: apiKeyInput,
-            model_name: modelName,
-            interface_mode: interfaceMode,
-          }),
+          body: JSON.stringify({ task_bindings: bindings }),
         })
           .then((response) => response.json())
           .then((data) => {
             if (data.success) {
-              testResultDiv.innerHTML =
-                '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-2"></i>' +
-                data.message +
-                "</div>";
+              aiApplyState(data.state || aiManagementState);
+              aiShowFeedback(aiTaskBindingsFeedback, "success", data.message, true);
             } else {
-              testResultDiv.innerHTML =
-                '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>' +
-                data.message +
-                "</div>";
+              aiShowFeedback(aiTaskBindingsFeedback, "danger", data.message, true);
             }
           })
           .catch((error) => {
-            testResultDiv.innerHTML =
-              '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle me-2"></i>测试失败: ' +
-              error.message +
-              "</div>";
+            aiShowFeedback(aiTaskBindingsFeedback, "danger", `保存失败: ${error.message}`, true);
           })
           .finally(() => {
-            testAiConfigBtn.disabled = false;
-            testAiConfigBtn.innerHTML =
-              '<i class="bi bi-play-circle me-2"></i>测试当前模型';
+            aiSaveTaskBindingsBtn.disabled = false;
           });
       });
     }
+
+    if (aiRunTaskTestsBtn) {
+      aiRunTaskTestsBtn.addEventListener("click", function () {
+        const bindings = aiCollectTaskBindings();
+        aiRunTaskTestsBtn.disabled = true;
+        aiShowFeedback(aiMgrFeedback, "info", "正在依次测试四项 AI 功能...", true);
+        fetch("{{ url_for('admin.test_ai_tasks') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": aiCsrfToken(),
+          },
+          body: JSON.stringify({ task_bindings: bindings }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.state) {
+              aiApplyState(data.state);
+            }
+            aiShowFeedback(
+              aiMgrFeedback,
+              data.success ? "success" : "warning",
+              data.message,
+              true
+            );
+          })
+          .catch((error) => {
+            aiShowFeedback(aiMgrFeedback, "danger", `测试失败: ${error.message}`, true);
+          })
+          .finally(() => {
+            aiRunTaskTestsBtn.disabled = false;
+          });
+      });
+    }
+
+    if (aiOverviewModalEl) {
+      aiOverviewModalEl.addEventListener("show.bs.modal", function () {
+        aiRenderOverviewModal();
+      });
+    }
+
+    if (aiProvidersModalEl) {
+      aiProvidersModalEl.addEventListener("show.bs.modal", function () {
+        aiRenderProvidersTable();
+      });
+    }
+
+    if (aiTaskBindingsModalEl) {
+      aiTaskBindingsModalEl.addEventListener("show.bs.modal", function () {
+        aiRenderTaskBindingsModal();
+      });
+    }
+
+    aiRenderAll();
 
     // 测试向量搜索连接
     const testVectorConfigBtn = document.getElementById("testVectorConfig");
@@ -2282,6 +2549,7 @@
       syncMobilePreview();
     }
 
+    {% if vector_indexing_available %}
     // 批量生成向量功能
     const startVectorIndexingBtn = document.getElementById(
       "startVectorIndexing"
@@ -2441,6 +2709,7 @@
           });
       }
     }
+    {% endif %}
   });
 
   // 控制"允许非登录用户使用AI搜索"开关的启用/禁用状态
@@ -2620,6 +2889,134 @@
     margin-top: 0.5rem;
   }
 
+  .ai-mgr-switch-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 72px;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 0.85rem;
+    background: #fff;
+  }
+
+  .ai-mgr-switch-hint {
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+
+  .ai-mgr-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.9rem;
+    padding: 0.28rem 0.7rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.95);
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .ai-mgr-task-card {
+    height: 100%;
+    padding: 0.85rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 0.9rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  }
+
+  .ai-mgr-task-title {
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  .ai-mgr-task-desc,
+  .ai-mgr-task-sub,
+  .ai-mgr-task-meta,
+  .ai-mgr-task-message {
+    font-size: 0.78rem;
+    color: #6b7280;
+    line-height: 1.35;
+  }
+
+  .ai-mgr-task-main {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .ai-mgr-status-light {
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+    background: #cbd5e1;
+  }
+
+  .ai-mgr-status-light.idle {
+    background: #cbd5e1;
+    box-shadow: 0 0 0 0 rgba(148, 163, 184, 0.35);
+  }
+
+  .ai-mgr-status-light.success {
+    background: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+    animation: aiMgrPulseGreen 1.8s infinite;
+  }
+
+  .ai-mgr-status-light.error {
+    background: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+    animation: aiMgrPulseRed 1.8s infinite;
+  }
+
+  .ai-mgr-empty {
+    padding: 1rem;
+    border: 1px dashed rgba(100, 116, 139, 0.35);
+    border-radius: 0.9rem;
+    background: rgba(248, 250, 252, 0.9);
+    color: #64748b;
+    font-size: 0.9rem;
+  }
+
+  .ai-mgr-binding-card {
+    height: 100%;
+    padding: 0.9rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 0.9rem;
+    background: #fff;
+  }
+
+  @keyframes aiMgrPulseGreen {
+    0% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+    }
+    70% {
+      box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
+  }
+
+  @keyframes aiMgrPulseRed {
+    0% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+    }
+    70% {
+      box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+  }
+
   @media (max-width: 767.98px) {
     .ai-task-model-card {
       min-height: auto;
@@ -2627,6 +3024,17 @@
 
     .ai-probe-list {
       max-height: 280px;
+    }
+
+    .ai-mgr-switch-card {
+      min-height: 84px;
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .ai-mgr-task-card,
+    .ai-mgr-binding-card {
+      min-height: auto;
     }
   }
 </style>

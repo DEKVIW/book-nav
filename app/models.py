@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 import json
 import random
 import string
@@ -10,7 +10,7 @@ from config import Config
 from sqlalchemy.orm import backref
 from sqlalchemy.exc import OperationalError
 
-# 定义网站和标签的多对多关系表
+# 瀹氫箟缃戠珯鍜屾爣绛剧殑澶氬澶氬叧绯昏〃
 website_tag = db.Table('website_tag',
     db.Column('website_id', db.Integer, db.ForeignKey('website.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True)
@@ -21,9 +21,9 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), index=True, unique=True)
     email = db.Column(db.String(120), index=True, unique=True)
     password_hash = db.Column(db.String(128))
-    avatar = db.Column(db.String(255))  # 用户头像字段
+    avatar = db.Column(db.String(255))  # 鐢ㄦ埛澶村儚瀛楁
     is_admin = db.Column(db.Boolean, default=False)
-    is_superadmin = db.Column(db.Boolean, default=False)  # 超级管理员标识
+    is_superadmin = db.Column(db.Boolean, default=False)  # 瓒呯骇绠＄悊鍛樻爣璇?
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     websites = db.relationship('Website', backref='creator', lazy='dynamic')
     
@@ -53,7 +53,6 @@ class InvitationCode(db.Model):
     
     created_by = db.relationship('User', foreign_keys=[created_by_id])
     used_by = db.relationship('User', foreign_keys=[used_by_id])
-    
     @staticmethod
     def generate_code():
         length = Config.INVITATION_CODE_LENGTH
@@ -74,13 +73,13 @@ class Category(db.Model):
     icon = db.Column(db.String(64))
     color = db.Column(db.String(16))
     order = db.Column(db.Integer, default=0)
-    display_limit = db.Column(db.Integer, default=10)  # 首页展示数量限制，默认为10个
+    display_limit = db.Column(db.Integer, default=10)  # 棣栭〉灞曠ず鏁伴噺闄愬埗锛岄粯璁や负10涓?
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # 添加父分类关系
+    # 娣诲姞鐖跺垎绫诲叧绯?
     parent_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=True)
     
-    # 关系定义
+    # 鍏崇郴瀹氫箟
     children = db.relationship('Category', 
                               backref=db.backref('parent', remote_side=[id]),
                               lazy='dynamic')
@@ -90,16 +89,16 @@ class Category(db.Model):
         return f'<Category {self.name}>'
         
     def get_ancestors(self):
-        """获取所有祖先分类，从直接父级到顶级"""
+        """鑾峰彇鎵€鏈夌鍏堝垎绫伙紝浠庣洿鎺ョ埗绾у埌椤剁骇"""
         ancestors = []
         current = self.parent
         while current:
             ancestors.append(current)
             current = current.parent
-        return ancestors[::-1]  # 逆序返回，从顶级到直接父级
+        return ancestors[::-1]  # 閫嗗簭杩斿洖锛屼粠椤剁骇鍒扮洿鎺ョ埗绾?
     
     def is_descendant_of(self, category_id):
-        """检查当前分类是否是指定分类的后代"""
+        """Check whether the current category is a descendant of the given category."""
         if self.parent_id is None:
             return False
         if self.parent_id == category_id:
@@ -107,7 +106,7 @@ class Category(db.Model):
         return self.parent.is_descendant_of(category_id)
     
     def get_all_descendants(self):
-        """获取所有后代分类（递归）"""
+        """Return all descendant categories recursively."""
         result = []
         for child in self.children:
             result.append(child)
@@ -137,17 +136,17 @@ class Website(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     
-    # 私有链接相关字段
+    # 绉佹湁閾炬帴鐩稿叧瀛楁
     is_private = db.Column(db.Boolean, default=False)
-    visible_to = db.Column(db.String(512), default='')  # 存储可见用户ID，用逗号分隔
+    visible_to = db.Column(db.String(512), default='')  # 瀛樺偍鍙鐢ㄦ埛ID锛岀敤閫楀彿鍒嗛殧
     
-    # 统计相关字段
+    # 缁熻鐩稿叧瀛楁
     views_today = db.Column(db.Integer, default=0)
     last_view = db.Column(db.DateTime, nullable=True)
     
-    # 死链检测相关字段
-    is_valid = db.Column(db.Boolean, default=True)  # 链接是否有效
-    last_check = db.Column(db.DateTime, nullable=True)  # 最后检测时间
+    # 姝婚摼妫€娴嬬浉鍏冲瓧娈?
+    is_valid = db.Column(db.Boolean, default=True)  # 閾炬帴鏄惁鏈夋晥
+    last_check = db.Column(db.DateTime, nullable=True)  # 鏈€鍚庢娴嬫椂闂?
 
     @property
     def display_icon_url(self):
@@ -163,20 +162,20 @@ class Website(db.Model):
         return f'<Website {self.title}>'
         
     def is_visible_to(self, user):
-        """检查链接是否对指定用户可见"""
-        # 如果不是私有链接，对所有人可见
+        """妫€鏌ラ摼鎺ユ槸鍚﹀鎸囧畾鐢ㄦ埛鍙"""
+        # 濡傛灉涓嶆槸绉佹湁閾炬帴锛屽鎵€鏈変汉鍙
         if not self.is_private:
             return True
             
-        # 如果是私有链接
-        if user is None:  # 未登录用户
+        # 濡傛灉鏄鏈夐摼鎺?
+        if user is None:  # 鏈櫥褰曠敤鎴?
             return False
             
-        # 创建者和管理员可见
+        # 鍒涘缓鑰呭拰绠＄悊鍛樺彲瑙?
         if user.is_admin or user.id == self.created_by_id:
             return True
             
-        # 检查是否在可见用户列表中
+        # 妫€鏌ユ槸鍚﹀湪鍙鐢ㄦ埛鍒楄〃涓?
         if self.visible_to:
             visible_user_ids = [int(id) for id in self.visible_to.split(',') if id]
             return user.id in visible_user_ids
@@ -265,45 +264,160 @@ class IconSyncTask(db.Model):
 
 
 class WebsiteVector(db.Model):
-    """网站向量元数据表"""
+    """缃戠珯鍚戦噺鍏冩暟鎹〃"""
     id = db.Column(db.Integer, primary_key=True)
     website_id = db.Column(db.Integer, db.ForeignKey('website.id'), unique=True, nullable=False)
     vector_status = db.Column(db.String(20), default='pending')  # pending, completed, failed
     embedding_model = db.Column(db.String(128), default='text-embedding-3-small')
-    dimension = db.Column(db.Integer, default=1536)  # 向量维度
+    dimension = db.Column(db.Integer, default=1536)  # 鍚戦噺缁村害
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # 关联关系
+    # 鍏宠仈鍏崇郴
     website = db.relationship('Website', backref='vector_info', uselist=False)
     
     def __repr__(self):
         return f'<WebsiteVector {self.website_id} - {self.vector_status}>'
 
 
+class AIProviderConfig(db.Model):
+    __tablename__ = 'ai_provider_config'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False, default='Default AI Provider')
+    api_base_url = db.Column(db.String(512), nullable=True)
+    api_key = db.Column(db.String(512), nullable=True)
+    interface_mode = db.Column(db.String(32), default='auto')
+    enabled = db.Column(db.Boolean, default=True)
+    priority = db.Column(db.Integer, default=100)
+    model_catalog_json = db.Column(db.Text, nullable=True)
+    recommended_models_json = db.Column(db.Text, nullable=True)
+    probe_last_at = db.Column(db.DateTime, nullable=True)
+    probe_error = db.Column(db.Text, nullable=True)
+    probe_signature = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    @classmethod
+    def ordered_query(cls, enabled_only=False):
+        query = cls.query.order_by(cls.priority.asc(), cls.id.asc())
+        if enabled_only:
+            query = query.filter_by(enabled=True)
+        return query
+
+    def get_model_catalog(self):
+        if not self.model_catalog_json:
+            return []
+
+        try:
+            payload = json.loads(self.model_catalog_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict) and isinstance(payload.get('models'), list):
+            return payload['models']
+        return []
+
+    def set_model_catalog(self, models):
+        self.model_catalog_json = json.dumps(models or [], ensure_ascii=False)
+
+    def get_recommended_models(self):
+        defaults = {
+            'intent': '',
+            'rerank': '',
+            'translate': '',
+            'site_info': '',
+            'fallback': '',
+        }
+        if not self.recommended_models_json:
+            return defaults
+
+        try:
+            payload = json.loads(self.recommended_models_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return defaults
+
+        if not isinstance(payload, dict):
+            return defaults
+
+        result = defaults.copy()
+        for key in result.keys():
+            value = payload.get(key)
+            result[key] = value.strip() if isinstance(value, str) else ''
+        return result
+
+    def set_recommended_models(self, models):
+        payload = {}
+        for key in ('intent', 'rerank', 'translate', 'site_info', 'fallback'):
+            value = ''
+            if isinstance(models, dict):
+                raw_value = models.get(key)
+                value = raw_value.strip() if isinstance(raw_value, str) else ''
+            payload[key] = value
+        self.recommended_models_json = json.dumps(payload, ensure_ascii=False)
+
+    def clear_probe_data(self):
+        self.model_catalog_json = None
+        self.recommended_models_json = None
+        self.probe_last_at = None
+        self.probe_error = None
+        self.probe_signature = None
+
+    def masked_api_key(self):
+        api_key = (self.api_key or '').strip()
+        if not api_key:
+            return ''
+        if len(api_key) <= 8:
+            return '*' * len(api_key)
+        return api_key[:4] + ('*' * (len(api_key) - 8)) + api_key[-4:]
+
+    def get_probe_stats(self):
+        from app.utils.ai_model_discovery import summarize_probe_catalog
+
+        return summarize_probe_catalog(self.get_model_catalog())
+
+    def to_dict(self, include_catalog=True):
+        data = {
+            'id': self.id,
+            'name': self.name or '',
+            'api_base_url': self.api_base_url or '',
+            'api_key_masked': self.masked_api_key(),
+            'has_api_key': bool((self.api_key or '').strip()),
+            'interface_mode': (self.interface_mode or 'auto').strip().lower() or 'auto',
+            'enabled': bool(self.enabled),
+            'priority': int(self.priority or 100),
+            'recommended_models': self.get_recommended_models(),
+            'probe_last_at': self.probe_last_at.isoformat() if self.probe_last_at else '',
+            'probe_error': self.probe_error or '',
+            'probe_signature': self.probe_signature or '',
+            'stats': self.get_probe_stats(),
+        }
+        if include_catalog:
+            data['catalog'] = self.get_model_catalog()
+        return data
+
+    def __repr__(self):
+        return f'<AIProviderConfig {self.id} {self.name}>'
+
+
 class SiteSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    site_name = db.Column(db.String(128), default="炫酷导航")
-    site_logo = db.Column(db.String(256), nullable=True)  # 存储logo图片URL
-    site_favicon = db.Column(db.String(256), nullable=True)  # 存储网站图标URL
+    site_name = db.Column(db.String(128), default='酷站导航')
+    site_logo = db.Column(db.String(256), nullable=True)
+    site_favicon = db.Column(db.String(256), nullable=True)
     site_subtitle = db.Column(db.String(256), nullable=True)
     site_keywords = db.Column(db.String(512), nullable=True)
     site_description = db.Column(db.String(1024), nullable=True)
-    footer_content = db.Column(db.Text, nullable=True)  # 自定义页脚内容
-    background_image = db.Column(db.String(512), nullable=True)  # 旧字段，保留以确保兼容性
-    enable_background = db.Column(db.Boolean, default=False)  # 旧字段，保留以确保兼容性
-    background_type = db.Column(db.String(32), default='none')  # 背景类型：none, image, gradient, color
-    background_url = db.Column(db.String(512), nullable=True)  # 背景图片URL或颜色值
-    
-    # PC端背景设置
-    pc_background_type = db.Column(db.String(32), default='none')  # PC端背景类型
-    pc_background_url = db.Column(db.String(512), nullable=True)  # PC端背景URL
-    
-    # 移动端背景设置
-    mobile_background_type = db.Column(db.String(32), default='none')  # 移动端背景类型
-    mobile_background_url = db.Column(db.String(512), nullable=True)  # 移动端背景URL
-
-    # 图标系统设置
+    footer_content = db.Column(db.Text, nullable=True)
+    background_image = db.Column(db.String(512), nullable=True)
+    enable_background = db.Column(db.Boolean, default=False)
+    background_type = db.Column(db.String(32), default='none')
+    background_url = db.Column(db.String(512), nullable=True)
+    pc_background_type = db.Column(db.String(32), default='none')
+    pc_background_url = db.Column(db.String(512), nullable=True)
+    mobile_background_type = db.Column(db.String(32), default='none')
+    mobile_background_url = db.Column(db.String(512), nullable=True)
     icon_display_mode = db.Column(db.String(32), default='smart')
     icon_auto_fetch_on_create = db.Column(db.Boolean, default=False)
     icon_default_sync_local = db.Column(db.Boolean, default=False)
@@ -312,81 +426,63 @@ class SiteSettings(db.Model):
     icon_imagebed_provider = db.Column(db.String(64), nullable=True)
     icon_imagebed_api_url = db.Column(db.String(512), nullable=True)
     icon_imagebed_token = db.Column(db.String(512), nullable=True)
-    
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # 过渡页设置
-    enable_transition = db.Column(db.Boolean, default=False)  # 是否启用过渡页
-    transition_time = db.Column(db.Integer, default=5)  # 访客停留时间（秒），设为0表示不显示过渡页直接跳转
-    admin_transition_time = db.Column(db.Integer, default=3)  # 管理员停留时间（秒），设为0表示不显示过渡页直接跳转
+    enable_transition = db.Column(db.Boolean, default=False)
+    transition_time = db.Column(db.Integer, default=5)
+    admin_transition_time = db.Column(db.Integer, default=3)
     transition_ad1 = db.Column(db.Text, nullable=True)
-    transition_ad2 = db.Column(db.Text, nullable=True)  # 过渡页广告位2
-    transition_remember_choice = db.Column(db.Boolean, default=True)  # 是否允许用户选择不再显示
-    transition_show_description = db.Column(db.Boolean, default=True)  # 是否显示网站描述
-    transition_theme = db.Column(db.String(32), default='default')  # 过渡页主题
+    transition_ad2 = db.Column(db.Text, nullable=True)
+    transition_remember_choice = db.Column(db.Boolean, default=True)
+    transition_show_description = db.Column(db.Boolean, default=True)
+    transition_theme = db.Column(db.String(32), default='default')
     transition_color = db.Column(db.String(32), default='#6e8efb')
-    
-    # 公告设置
-    announcement_enabled = db.Column(db.Boolean, default=False)  # 是否启用公告
-    announcement_title = db.Column(db.String(128), nullable=True)  # 公告标题
-    announcement_content = db.Column(db.Text, nullable=True)  # 公告内容
-    announcement_start = db.Column(db.DateTime, nullable=True)  # 公告开始时间
-    announcement_end = db.Column(db.DateTime, nullable=True)  # 公告结束时间
-    announcement_remember_days = db.Column(db.Integer, default=7)  # 不再提示的天数
-    
-    # AI 搜索设置
-    ai_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用AI搜索功能
-    ai_search_allow_anonymous = db.Column(db.Boolean, default=False)  # 是否允许非登录用户使用AI搜索
-    ai_api_base_url = db.Column(db.String(512), nullable=True)  # AI API基础URL
-    ai_api_key = db.Column(db.String(512), nullable=True)  # AI API密钥（加密存储）
-    ai_model_name = db.Column(db.String(128), nullable=True)  # AI模型名称
-    ai_interface_mode = db.Column(db.String(32), default='auto')  # AI接口模式：auto, chat, responses
-    ai_temperature = db.Column(db.Float, default=0.7)  # AI温度参数
-    ai_max_tokens = db.Column(db.Integer, default=500)  # AI最大token数
-    ai_auto_model_selection_enabled = db.Column(db.Boolean, default=True)  # 是否自动按任务选择模型
-    ai_model_catalog_json = db.Column(db.Text, nullable=True)  # 最近一次模型探测结果
-    ai_selected_intent_model = db.Column(db.String(128), nullable=True)  # 搜索意图分析模型
-    ai_selected_rerank_model = db.Column(db.String(128), nullable=True)  # 搜索推荐/排序模型
-    ai_selected_translate_model = db.Column(db.String(128), nullable=True)  # 翻译模型
-    ai_selected_site_info_model = db.Column(db.String(128), nullable=True)  # 网站信息补全模型
-    ai_selected_fallback_model = db.Column(db.String(128), nullable=True)  # 备用模型
-    ai_model_probe_last_at = db.Column(db.DateTime, nullable=True)  # 最近一次模型探测时间
-    ai_model_probe_error = db.Column(db.Text, nullable=True)  # 最近一次模型探测错误
-    ai_model_probe_signature = db.Column(db.String(64), nullable=True)  # 模型探测签名
-    
-    # 向量搜索设置（基于 Qdrant）
-    vector_search_enabled = db.Column(db.Boolean, default=False)  # 是否启用向量搜索
-    qdrant_url = db.Column(db.String(512), default='http://localhost:6333')  # Qdrant 服务地址
-    embedding_model = db.Column(db.String(128), default='text-embedding-3-small')  # Embedding 模型
-    embedding_api_base_url = db.Column(db.String(512), nullable=True)  # Embedding API 基础 URL（独立配置）
-    embedding_api_key = db.Column(db.String(512), nullable=True)  # Embedding API 密钥（独立配置，加密存储）
-    vector_similarity_threshold = db.Column(db.Float, default=0.3)  # 向量相似度阈值
-    vector_max_results = db.Column(db.Integer, default=50)  # 向量搜索最大结果数
-    
-    # WebDAV 云端备份配置
-    webdav_url = db.Column(db.String(512), nullable=True)  # WebDAV 服务器地址
-    webdav_username = db.Column(db.String(256), nullable=True)  # WebDAV 用户名
-    webdav_password = db.Column(db.String(512), nullable=True)  # WebDAV 密码（加密存储）
-    webdav_path = db.Column(db.String(512), default='/nav_backups/')  # 远端备份目录路径
-    webdav_auto_backup = db.Column(db.Boolean, default=False)  # 是否启用自动备份
-    webdav_backup_interval = db.Column(db.Integer, default=24)  # 自动备份间隔（小时）
-    webdav_backup_keep_count = db.Column(db.Integer, default=10)  # 远端保留备份份数
-    webdav_last_backup_time = db.Column(db.DateTime, nullable=True)  # 上次自动备份时间
-    webdav_last_backup_status = db.Column(db.String(256), nullable=True)  # 上次备份状态信息
-    
+    announcement_enabled = db.Column(db.Boolean, default=False)
+    announcement_title = db.Column(db.String(128), nullable=True)
+    announcement_content = db.Column(db.Text, nullable=True)
+    announcement_start = db.Column(db.DateTime, nullable=True)
+    announcement_end = db.Column(db.DateTime, nullable=True)
+    announcement_remember_days = db.Column(db.Integer, default=7)
+    ai_search_enabled = db.Column(db.Boolean, default=False)
+    ai_search_allow_anonymous = db.Column(db.Boolean, default=False)
+    ai_api_base_url = db.Column(db.String(512), nullable=True)
+    ai_api_key = db.Column(db.String(512), nullable=True)
+    ai_model_name = db.Column(db.String(128), nullable=True)
+    ai_interface_mode = db.Column(db.String(32), default='auto')
+    ai_temperature = db.Column(db.Float, default=0.7)
+    ai_max_tokens = db.Column(db.Integer, default=500)
+    ai_auto_model_selection_enabled = db.Column(db.Boolean, default=True)
+    ai_model_catalog_json = db.Column(db.Text, nullable=True)
+    ai_selected_intent_model = db.Column(db.String(128), nullable=True)
+    ai_selected_rerank_model = db.Column(db.String(128), nullable=True)
+    ai_selected_translate_model = db.Column(db.String(128), nullable=True)
+    ai_selected_site_info_model = db.Column(db.String(128), nullable=True)
+    ai_selected_fallback_model = db.Column(db.String(128), nullable=True)
+    ai_model_probe_last_at = db.Column(db.DateTime, nullable=True)
+    ai_model_probe_error = db.Column(db.Text, nullable=True)
+    ai_model_probe_signature = db.Column(db.String(64), nullable=True)
+    ai_task_bindings_json = db.Column(db.Text, nullable=True)
+    ai_task_test_results_json = db.Column(db.Text, nullable=True)
+    vector_search_enabled = db.Column(db.Boolean, default=False)
+    qdrant_url = db.Column(db.String(512), default='http://localhost:6333')
+    embedding_model = db.Column(db.String(128), default='text-embedding-3-small')
+    embedding_api_base_url = db.Column(db.String(512), nullable=True)
+    embedding_api_key = db.Column(db.String(512), nullable=True)
+    vector_similarity_threshold = db.Column(db.Float, default=0.3)
+    vector_max_results = db.Column(db.Integer, default=50)
+    webdav_url = db.Column(db.String(512), nullable=True)
+    webdav_username = db.Column(db.String(256), nullable=True)
+    webdav_password = db.Column(db.String(512), nullable=True)
+    webdav_path = db.Column(db.String(512), default='/nav_backups/')
+    webdav_auto_backup = db.Column(db.Boolean, default=False)
+    webdav_backup_interval = db.Column(db.Integer, default=24)
+    webdav_backup_keep_count = db.Column(db.Integer, default=10)
+    webdav_last_backup_time = db.Column(db.DateTime, nullable=True)
+    webdav_last_backup_status = db.Column(db.String(256), nullable=True)
+
     @staticmethod
     def get_default_qdrant_url():
-        """
-        获取默认Qdrant URL（自动检测Docker环境）
-        
-        Docker环境中，nav容器访问qdrant容器应使用服务名'qdrant'
-        本地开发环境使用'localhost'
-        """
         import os
-        # 检测是否在Docker容器中运行
-        # 方法1: 检查是否存在 /.dockerenv 文件（Docker标准检测方法）
-        # 方法2: 检查环境变量 DOCKER_CONTAINER
-        # 方法3: 检查 /proc/self/cgroup 是否包含docker
+
         is_docker = False
         try:
             if os.path.exists('/.dockerenv'):
@@ -394,20 +490,14 @@ class SiteSettings(db.Model):
             elif os.environ.get('DOCKER_CONTAINER') == 'true':
                 is_docker = True
             elif os.path.exists('/proc/self/cgroup'):
-                with open('/proc/self/cgroup', 'r') as f:
-                    if 'docker' in f.read():
+                with open('/proc/self/cgroup', 'r') as file_obj:
+                    if 'docker' in file_obj.read():
                         is_docker = True
         except Exception:
-            pass  # 如果检测失败，默认使用localhost
-        
-        if is_docker:
-            # Docker环境中，使用服务名访问（docker-compose.yml中定义的服务名）
-            return 'http://qdrant:6333'
-        else:
-            # 本地开发环境
-            return 'http://localhost:6333'
-    
-    # 单例模式：确保只有一条记录
+            pass
+
+        return 'http://qdrant:6333' if is_docker else 'http://localhost:6333'
+
     @classmethod
     def _database_path(cls):
         db_uri = None
@@ -425,24 +515,23 @@ class SiteSettings(db.Model):
         if not db_path:
             return False
 
-        from app.utils.db_migration import migrate_site_settings_fields, migrate_webdav_config_table
+        from app.utils.db_migration import migrate_ai_provider_config_table, migrate_site_settings_fields, migrate_webdav_config_table
         from app.utils.icon_db_migration import migrate_icon_management_tables
 
         migrate_site_settings_fields(db_path)
         migrate_webdav_config_table(db_path)
+        migrate_ai_provider_config_table(db_path)
         migrate_icon_management_tables(db_path)
         return True
 
     @classmethod
     def get_settings(cls):
-        """获取站点设置（单例模式）"""
         try:
             settings = cls.query.first()
         except OperationalError as exc:
             message = str(exc).lower()
             if 'site_settings' not in message or 'no such column' not in message:
                 raise
-
             db.session.rollback()
             db.session.remove()
             repaired = cls._repair_legacy_schema()
@@ -454,21 +543,19 @@ class SiteSettings(db.Model):
             settings = cls()
             db.session.add(settings)
             db.session.commit()
+
+        if settings.ensure_legacy_ai_provider():
+            settings.sync_legacy_ai_fields_from_providers()
+            db.session.commit()
+
         return settings
-    
+
     def get_embedding_api_config(self):
-        """
-        获取 Embedding API 配置（向后兼容）
-        
-        优先使用独立的 Embedding API 配置，如果未配置则回退到 AI 搜索配置
-        
-        Returns:
-            tuple: (api_base_url, api_key)
-        """
-        # 优先使用独立配置
         if self.embedding_api_base_url and self.embedding_api_key:
             return self.embedding_api_base_url, self.embedding_api_key
-        # 回退到 AI 搜索配置
+        provider = self.get_primary_ai_provider(enabled_only=True) or self.get_primary_ai_provider(enabled_only=False)
+        if provider and provider.api_base_url and provider.api_key:
+            return provider.api_base_url, provider.api_key
         return self.ai_api_base_url, self.ai_api_key
 
     def get_icon_imagebed_config(self):
@@ -479,7 +566,6 @@ class SiteSettings(db.Model):
 
     def get_icon_source_providers(self):
         from app.main.utils import merge_icon_source_providers
-
         return merge_icon_source_providers(self.icon_source_providers_json)
 
     def set_icon_source_providers(self, providers):
@@ -488,12 +574,10 @@ class SiteSettings(db.Model):
     def get_ai_model_catalog(self):
         if not self.ai_model_catalog_json:
             return []
-
         try:
             payload = json.loads(self.ai_model_catalog_json)
         except (TypeError, ValueError, json.JSONDecodeError):
             return []
-
         if isinstance(payload, list):
             return payload
         if isinstance(payload, dict) and isinstance(payload.get('models'), list):
@@ -505,33 +589,257 @@ class SiteSettings(db.Model):
 
     def get_ai_selected_models(self):
         return {
-            'intent': self.ai_selected_intent_model,
-            'rerank': self.ai_selected_rerank_model,
-            'translate': self.ai_selected_translate_model,
-            'site_info': self.ai_selected_site_info_model,
-            'fallback': self.ai_selected_fallback_model,
+            'intent': self.ai_selected_intent_model or '',
+            'rerank': self.ai_selected_rerank_model or '',
+            'translate': self.ai_selected_translate_model or '',
+            'site_info': self.ai_selected_site_info_model or '',
+            'fallback': self.ai_selected_fallback_model or '',
         }
-    
+
+    def get_ai_providers(self, enabled_only=False):
+        return AIProviderConfig.ordered_query(enabled_only=enabled_only).all()
+
+    def get_primary_ai_provider(self, enabled_only=True):
+        providers = self.get_ai_providers(enabled_only=enabled_only)
+        if providers:
+            return providers[0]
+        if enabled_only:
+            providers = self.get_ai_providers(enabled_only=False)
+            if providers:
+                return providers[0]
+        return None
+
+    def get_ai_task_bindings(self):
+        defaults = {
+            'intent': {'mode': 'auto', 'provider_id': None, 'model_name': ''},
+            'rerank': {'mode': 'auto', 'provider_id': None, 'model_name': ''},
+            'translate': {'mode': 'auto', 'provider_id': None, 'model_name': ''},
+            'site_info': {'mode': 'auto', 'provider_id': None, 'model_name': ''},
+        }
+        if not self.ai_task_bindings_json:
+            return defaults
+        try:
+            payload = json.loads(self.ai_task_bindings_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return defaults
+        if not isinstance(payload, dict):
+            return defaults
+
+        normalized = {}
+        for task_key, default_value in defaults.items():
+            raw_binding = payload.get(task_key)
+            if not isinstance(raw_binding, dict):
+                normalized[task_key] = default_value.copy()
+                continue
+
+            provider_id = raw_binding.get('provider_id')
+            try:
+                provider_id = int(provider_id) if provider_id not in (None, '', False) else None
+            except (TypeError, ValueError):
+                provider_id = None
+
+            mode = (raw_binding.get('mode') or 'auto').strip().lower()
+            if mode not in {'auto', 'manual'}:
+                mode = 'auto'
+
+            model_name = raw_binding.get('model_name')
+            model_name = model_name.strip() if isinstance(model_name, str) else ''
+
+            normalized[task_key] = {
+                'mode': mode,
+                'provider_id': provider_id,
+                'model_name': model_name,
+            }
+
+        return normalized
+
+    def set_ai_task_bindings(self, bindings):
+        payload = {}
+        if not isinstance(bindings, dict):
+            bindings = {}
+        for task_key in ('intent', 'rerank', 'translate', 'site_info'):
+            raw_binding = bindings.get(task_key)
+            if not isinstance(raw_binding, dict):
+                raw_binding = {}
+            provider_id = raw_binding.get('provider_id')
+            try:
+                provider_id = int(provider_id) if provider_id not in (None, '', False) else None
+            except (TypeError, ValueError):
+                provider_id = None
+            mode = (raw_binding.get('mode') or 'auto').strip().lower()
+            if mode not in {'auto', 'manual'}:
+                mode = 'auto'
+            model_name = raw_binding.get('model_name')
+            model_name = model_name.strip() if isinstance(model_name, str) else ''
+            payload[task_key] = {'mode': mode, 'provider_id': provider_id, 'model_name': model_name}
+        self.ai_task_bindings_json = json.dumps(payload, ensure_ascii=False)
+
+    def get_ai_task_test_results(self):
+        defaults = {
+            'intent': {'status': 'idle', 'message': '', 'provider_id': None, 'provider_name': '', 'model_name': '', 'tested_at': '', 'protocol': ''},
+            'rerank': {'status': 'idle', 'message': '', 'provider_id': None, 'provider_name': '', 'model_name': '', 'tested_at': '', 'protocol': ''},
+            'translate': {'status': 'idle', 'message': '', 'provider_id': None, 'provider_name': '', 'model_name': '', 'tested_at': '', 'protocol': ''},
+            'site_info': {'status': 'idle', 'message': '', 'provider_id': None, 'provider_name': '', 'model_name': '', 'tested_at': '', 'protocol': ''},
+        }
+        if not self.ai_task_test_results_json:
+            return defaults
+        try:
+            payload = json.loads(self.ai_task_test_results_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return defaults
+        if not isinstance(payload, dict):
+            return defaults
+
+        normalized = {}
+        for task_key, default_value in defaults.items():
+            raw_result = payload.get(task_key)
+            if not isinstance(raw_result, dict):
+                normalized[task_key] = default_value.copy()
+                continue
+            provider_id = raw_result.get('provider_id')
+            try:
+                provider_id = int(provider_id) if provider_id not in (None, '', False) else None
+            except (TypeError, ValueError):
+                provider_id = None
+            status = (raw_result.get('status') or 'idle').strip().lower()
+            if status not in {'idle', 'success', 'error'}:
+                status = 'idle'
+            normalized[task_key] = {
+                'status': status,
+                'message': raw_result.get('message', '') or '',
+                'provider_id': provider_id,
+                'provider_name': raw_result.get('provider_name', '') or '',
+                'model_name': raw_result.get('model_name', '') or '',
+                'tested_at': raw_result.get('tested_at', '') or '',
+                'protocol': raw_result.get('protocol', '') or '',
+            }
+        return normalized
+
+    def set_ai_task_test_results(self, results):
+        payload = {}
+        if not isinstance(results, dict):
+            results = {}
+        for task_key in ('intent', 'rerank', 'translate', 'site_info'):
+            raw_result = results.get(task_key)
+            if not isinstance(raw_result, dict):
+                raw_result = {}
+            provider_id = raw_result.get('provider_id')
+            try:
+                provider_id = int(provider_id) if provider_id not in (None, '', False) else None
+            except (TypeError, ValueError):
+                provider_id = None
+            status = (raw_result.get('status') or 'idle').strip().lower()
+            if status not in {'idle', 'success', 'error'}:
+                status = 'idle'
+            payload[task_key] = {
+                'status': status,
+                'message': raw_result.get('message', '') or '',
+                'provider_id': provider_id,
+                'provider_name': raw_result.get('provider_name', '') or '',
+                'model_name': raw_result.get('model_name', '') or '',
+                'tested_at': raw_result.get('tested_at', '') or '',
+                'protocol': raw_result.get('protocol', '') or '',
+            }
+        self.ai_task_test_results_json = json.dumps(payload, ensure_ascii=False)
+
+    def ensure_legacy_ai_provider(self):
+        if AIProviderConfig.query.count() > 0:
+            return False
+        api_base_url = (self.ai_api_base_url or '').strip()
+        api_key = (self.ai_api_key or '').strip()
+        if not api_base_url or not api_key:
+            return False
+        provider = AIProviderConfig(
+            name='默认 AI 提供方',
+            api_base_url=api_base_url,
+            api_key=api_key,
+            interface_mode=(self.ai_interface_mode or 'auto').strip().lower() or 'auto',
+            enabled=True,
+            priority=100,
+            probe_last_at=self.ai_model_probe_last_at,
+            probe_error=self.ai_model_probe_error,
+            probe_signature=self.ai_model_probe_signature,
+        )
+        provider.set_model_catalog(self.get_ai_model_catalog())
+        provider.set_recommended_models(self.get_ai_selected_models())
+        db.session.add(provider)
+        db.session.flush()
+        if not self.ai_task_bindings_json:
+            bindings = {
+                'intent': {'mode': 'auto', 'provider_id': provider.id, 'model_name': ''},
+                'rerank': {'mode': 'auto', 'provider_id': provider.id, 'model_name': ''},
+                'translate': {'mode': 'auto', 'provider_id': provider.id, 'model_name': ''},
+                'site_info': {'mode': 'auto', 'provider_id': provider.id, 'model_name': ''},
+            }
+            legacy_manual_model = (self.ai_model_name or '').strip()
+            if legacy_manual_model and not bool(getattr(self, 'ai_auto_model_selection_enabled', False)):
+                for task_key in bindings.keys():
+                    bindings[task_key]['mode'] = 'manual'
+                    bindings[task_key]['model_name'] = legacy_manual_model
+            self.set_ai_task_bindings(bindings)
+        if not self.ai_task_test_results_json:
+            self.set_ai_task_test_results({})
+        return True
+
+    def sync_legacy_ai_fields_from_providers(self):
+        provider = self.get_primary_ai_provider(enabled_only=True) or self.get_primary_ai_provider(enabled_only=False)
+        if not provider:
+            self.ai_api_base_url = None
+            self.ai_api_key = None
+            self.ai_interface_mode = 'auto'
+            self.ai_model_catalog_json = None
+            self.ai_model_probe_last_at = None
+            self.ai_model_probe_error = None
+            self.ai_model_probe_signature = None
+            self.ai_selected_intent_model = None
+            self.ai_selected_rerank_model = None
+            self.ai_selected_translate_model = None
+            self.ai_selected_site_info_model = None
+            self.ai_selected_fallback_model = None
+            self.ai_auto_model_selection_enabled = False
+            self.ai_model_name = None
+            return
+        self.ai_api_base_url = provider.api_base_url
+        self.ai_api_key = provider.api_key
+        self.ai_interface_mode = (provider.interface_mode or 'auto').strip().lower() or 'auto'
+        self.ai_model_catalog_json = provider.model_catalog_json
+        self.ai_model_probe_last_at = provider.probe_last_at
+        self.ai_model_probe_error = provider.probe_error
+        self.ai_model_probe_signature = provider.probe_signature
+        recommended = provider.get_recommended_models()
+        self.ai_selected_intent_model = recommended.get('intent') or None
+        self.ai_selected_rerank_model = recommended.get('rerank') or None
+        self.ai_selected_translate_model = recommended.get('translate') or None
+        self.ai_selected_site_info_model = recommended.get('site_info') or None
+        self.ai_selected_fallback_model = recommended.get('fallback') or None
+        bindings = self.get_ai_task_bindings()
+        self.ai_auto_model_selection_enabled = any(binding.get('mode') == 'auto' for binding in bindings.values())
+        first_manual_model = ''
+        for binding in bindings.values():
+            if binding.get('mode') == 'manual' and binding.get('model_name'):
+                first_manual_model = binding['model_name']
+                break
+        self.ai_model_name = first_manual_model or recommended.get('fallback') or self.ai_model_name
+
     def __repr__(self):
         return f'<SiteSettings {self.site_name}>'
 
 
 class WebDAVConfig(db.Model):
-    """WebDAV 云端备份配置（支持多个云端）"""
     __tablename__ = 'webdav_config'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(128), nullable=False, default='我的云端备份')
+    name = db.Column(db.String(128), nullable=False, default='鎴戠殑浜戠澶囦唤')
     webdav_url = db.Column(db.String(512), nullable=True)
     webdav_username = db.Column(db.String(256), nullable=True)
-    webdav_password = db.Column(db.String(512), nullable=True)  # 加密存储
+    webdav_password = db.Column(db.String(512), nullable=True)  # 鍔犲瘑瀛樺偍
     webdav_path = db.Column(db.String(512), default='/nav_backups/')
     enabled = db.Column(db.Boolean, default=True)
     
-    # 自动备份设置
+    # 鑷姩澶囦唤璁剧疆
     auto_backup = db.Column(db.Boolean, default=False)
-    backup_interval = db.Column(db.Integer, default=24)       # 备份间隔（小时）
-    backup_keep_count = db.Column(db.Integer, default=10)     # 远端保留份数
+    backup_interval = db.Column(db.Integer, default=24)       # 澶囦唤闂撮殧锛堝皬鏃讹級
+    backup_keep_count = db.Column(db.Integer, default=10)     # 杩滅淇濈暀浠芥暟
     last_backup_time = db.Column(db.DateTime, nullable=True)
     last_backup_status = db.Column(db.String(256), nullable=True)
     
@@ -539,10 +847,10 @@ class WebDAVConfig(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def to_dict(self):
-        """转换为字典用于 JSON 序列化"""
+        """Serialize to a dictionary for JSON responses."""
         status_text = self.last_backup_status or ''
         status_type = 'none'
-        status_msg = '从未备份'
+        status_msg = '浠庢湭澶囦唤'
         if status_text:
             parts = status_text.split('|', 1)
             if len(parts) == 2:
@@ -573,10 +881,10 @@ class WebDAVConfig(db.Model):
 
 class Background(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(128))  # 背景名称
-    url = db.Column(db.String(512))  # 背景URL
-    type = db.Column(db.String(32))  # 背景类型：image, gradient, color
-    device_type = db.Column(db.String(32))  # 设备类型：pc, mobile, both
+    title = db.Column(db.String(128))  # 鑳屾櫙鍚嶇О
+    url = db.Column(db.String(512))  # 鑳屾櫙URL
+    type = db.Column(db.String(32))  # 鑳屾櫙绫诲瀷锛歩mage, gradient, color
+    device_type = db.Column(db.String(32))  # 璁惧绫诲瀷锛歱c, mobile, both
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -590,13 +898,13 @@ class OperationLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     operation_type = db.Column(db.String(50))  # ADD, MODIFY, DELETE
-    website_id = db.Column(db.Integer, nullable=True)  # 可以为空，表示记录已被删除的网站
+    website_id = db.Column(db.Integer, nullable=True)  # 鍙互涓虹┖锛岃〃绀鸿褰曞凡琚垹闄ょ殑缃戠珯
     website_title = db.Column(db.String(128), nullable=True)
     website_url = db.Column(db.String(256), nullable=True)
     website_icon = db.Column(db.String(256), nullable=True)
     category_id = db.Column(db.Integer, nullable=True)
     category_name = db.Column(db.String(64), nullable=True)
-    details = db.Column(db.Text, nullable=True)  # 存储更多操作细节，JSON格式
+    details = db.Column(db.Text, nullable=True)  # 瀛樺偍鏇村鎿嶄綔缁嗚妭锛孞SON鏍煎紡
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', backref='operations')
@@ -606,19 +914,19 @@ class OperationLog(db.Model):
 
 
 class DeadlinkCheck(db.Model):
-    """死链检测记录模型"""
+    """Dead link check record."""
     id = db.Column(db.Integer, primary_key=True)
-    check_id = db.Column(db.String(36), index=True)  # 检测批次ID，使用UUID
+    check_id = db.Column(db.String(36), index=True)  # 妫€娴嬫壒娆D锛屼娇鐢║UID
     website_id = db.Column(db.Integer, db.ForeignKey('website.id'), nullable=False)
     url = db.Column(db.String(256), nullable=False)
-    is_valid = db.Column(db.Boolean, default=True)  # True: 有效链接, False: 无效链接
-    status_code = db.Column(db.Integer, nullable=True)  # HTTP状态码
-    error_type = db.Column(db.String(50), nullable=True)  # 错误类型: timeout, connection_error, etc.
-    error_message = db.Column(db.Text, nullable=True)  # 详细错误信息
-    response_time = db.Column(db.Float, nullable=True)  # 响应时间(秒)
+    is_valid = db.Column(db.Boolean, default=True)  # True: 鏈夋晥閾炬帴, False: 鏃犳晥閾炬帴
+    status_code = db.Column(db.Integer, nullable=True)  # HTTP鐘舵€佺爜
+    error_type = db.Column(db.String(50), nullable=True)  # 閿欒绫诲瀷: timeout, connection_error, etc.
+    error_message = db.Column(db.Text, nullable=True)  # 璇︾粏閿欒淇℃伅
+    response_time = db.Column(db.Float, nullable=True)  # 鍝嶅簲鏃堕棿(绉?
     checked_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # 关系定义
+    # 鍏崇郴瀹氫箟
     website = db.relationship('Website', backref='deadlink_checks')
     
     def __repr__(self):
