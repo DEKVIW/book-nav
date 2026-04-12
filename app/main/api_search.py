@@ -496,7 +496,26 @@ def _progressive_search(query: str, user_id: Optional[int]):
                     }
                     yield f"data: {json_module.dumps(enhanced_error_data, ensure_ascii=False)}\n\n"
             
-            if settings.ai_search_enabled and all([settings.ai_api_base_url, settings.ai_api_key]):
+            rerank_ai_service = None
+            intent_ai_service = None
+            if settings.ai_search_enabled:
+                try:
+                    from app.utils.ai_search import create_ai_service_from_settings
+
+                    rerank_ai_service = create_ai_service_from_settings(
+                        settings,
+                        require_enabled=True,
+                        task='rerank'
+                    )
+                    intent_ai_service = create_ai_service_from_settings(
+                        settings,
+                        require_enabled=True,
+                        task='intent'
+                    )
+                except Exception as e:
+                    current_app.logger.error(f"创建 AI 搜索服务失败: {str(e)}")
+
+            if rerank_ai_service:
                 if len(websites_data) > 0:
                     needs_ai_intent = (
                         len(query) > 5 or 
@@ -504,22 +523,6 @@ def _progressive_search(query: str, user_id: Optional[int]):
                         ' ' in query
                     )
                     try:
-                        from app.utils.ai_search import create_ai_service_from_settings
-
-                        rerank_ai_service = create_ai_service_from_settings(
-                            settings,
-                            require_enabled=True,
-                            task='rerank'
-                        )
-                        intent_ai_service = create_ai_service_from_settings(
-                            settings,
-                            require_enabled=True,
-                            task='intent'
-                        )
-
-                        if not rerank_ai_service:
-                            raise ValueError('未找到可用于 AI 排序的模型')
-                        
                         websites_for_ai = []
                         website_id_map = {}
                         for site_data in websites_data[:50]:
@@ -527,7 +530,7 @@ def _progressive_search(query: str, user_id: Optional[int]):
                                 'id': site_data['id'],
                                 'title': site_data['title'],
                                 'description': site_data.get('description', ''),
-                                'category': site_data.get('category', {}).get('name', ''),
+                                'category': (site_data.get('category') or {}).get('name', ''),
                                 'url': site_data['url'],
                                 'vector_score': site_data.get('vector_score')
                             })

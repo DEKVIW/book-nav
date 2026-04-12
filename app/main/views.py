@@ -10,7 +10,16 @@ from app.main import bp
 from app.models import Category, Website, SiteSettings, WebsiteIcon
 from app.main.forms import WebsiteForm
 from app.utils.icon_service import delete_website_icon_assets, sync_icon_after_save
+from app.utils.ai_search import resolve_ai_service_candidates
 from datetime import datetime
+
+
+def _can_show_frontend_ai_search(settings):
+    if not settings or not settings.ai_search_enabled:
+        return False
+    if not current_user.is_authenticated and not settings.ai_search_allow_anonymous:
+        return False
+    return bool(resolve_ai_service_candidates(settings, task='rerank'))
 
 
 @bp.route('/')
@@ -123,7 +132,8 @@ def index():
                            title='首页', 
                            categories=categories, 
                            featured_sites=featured_sites,
-                           settings=settings)
+                           settings=settings,
+                           frontend_ai_search_available=_can_show_frontend_ai_search(settings))
 
 
 @bp.route('/category/<int:id>')

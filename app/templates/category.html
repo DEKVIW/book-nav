@@ -584,6 +584,7 @@ DEBUG - Settings信息:
         title="{{ website.description }}"
         data-bs-toggle="tooltip"
         data-bs-placement="bottom"
+        draggable="false"
         target="_blank"
       >
         {% if website.is_private %}
@@ -599,7 +600,8 @@ DEBUG - Settings信息:
         <div class="site-header">
           <div class="site-icon">
             {% if website.display_icon_url %}
-            <img src="{{ website.display_icon_url }}" alt="{{ website.title }}" 
+            <img src="{{ website.display_icon_url }}" alt="{{ website.title }}"
+                 draggable="false"
                  referrerpolicy="no-referrer"
                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
             <div class="default-site-icon" style="display:none;">
@@ -1061,6 +1063,7 @@ DEBUG - Settings信息:
       card.title = website.description || "";
       card.dataset.bsToggle = "tooltip";
       card.dataset.bsPlacement = "bottom";
+      card.draggable = false;
 
       // 添加私有标记
       if (website.is_private) {
@@ -1092,7 +1095,8 @@ DEBUG - Settings信息:
       siteIcon.className = "site-icon";
       if (website.icon) {
         siteIcon.innerHTML = `
-          <img src="${website.icon}" alt="${website.title}" 
+          <img src="${website.icon}" alt="${website.title}"
+               draggable="false"
                referrerpolicy="no-referrer"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
           <div class="default-site-icon" style="display: none;">${website.title.charAt(0).toUpperCase()}</div>

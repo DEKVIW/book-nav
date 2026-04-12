@@ -368,7 +368,7 @@ body {
 }
 
 .site-card.draggable {
-  cursor: move;
+  cursor: pointer;
   position: relative;
 }
 
@@ -404,13 +404,19 @@ body {
   border-radius: 50%;
   background-color: rgba(112, 73, 240, 0.1);
   color: #7049f0;
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
   font-size: 12px;
-  cursor: move;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.site-card .private-badge + .drag-handle {
+  right: 38px;
 }
 
 /* 处理右上角独立显示的拖拽手柄 */
@@ -420,6 +426,11 @@ body {
 
 .site-card:hover .drag-handle {
   opacity: 1;
+}
+
+.site-card.dragging .drag-handle,
+.site-card .drag-handle:active {
+  cursor: grabbing;
 }
 
 .drag-instructions {

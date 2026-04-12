@@ -140,10 +140,7 @@ head %}
             placeholder="请输入关键字搜索网站"
             autocomplete="off"
           />
-          {% if settings and settings.ai_search_enabled and
-          settings.ai_api_base_url and settings.ai_api_key and
-          settings.ai_model_name %} {% if current_user.is_authenticated or
-          settings.ai_search_allow_anonymous %}
+          {% if frontend_ai_search_available %}
           <div class="ai-search-toggle-container" title="启用AI智能搜索">
             <input
               type="checkbox"
@@ -155,7 +152,7 @@ head %}
               <span class="ai-search-toggle-text">AI</span>
             </label>
           </div>
-          {% endif %} {% endif %}
+          {% endif %}
           <button type="submit" class="main-search-button">
             <i class="bi bi-search"></i>
           </button>
@@ -270,11 +267,17 @@ head %}
             title="{{ website.description }}"
             data-bs-toggle="tooltip"
             data-bs-placement="bottom"
+            draggable="false"
             target="_blank"
           >
             {% if website.is_private %}
             <div class="private-badge" title="私有链接">
               <i class="bi bi-lock-fill"></i>
+            </div>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.is_admin %}
+            <div class="drag-handle" title="拖动排序">
+              <i class="bi bi-grip-vertical"></i>
             </div>
             {% endif %}
             <div class="site-header">
@@ -283,6 +286,7 @@ head %}
                 <img
                   src="{{ website.display_icon_url }}"
                   alt="{{ website.title }}"
+                  draggable="false"
                   referrerpolicy="no-referrer"
                   onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                 />

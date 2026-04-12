@@ -23,6 +23,7 @@
   min-height: 90px;
   height: auto;
   display: flex;
+  -webkit-user-drag: none;
 }
 
 /* 有背景时增加卡片不透明度 */
@@ -201,8 +202,12 @@ body:not(.bg-none) .site-card:hover {
 }
 
 /* 拖拽相关样式 */
+.site-card img {
+  -webkit-user-drag: none;
+}
+
 .site-card.draggable {
-  cursor: grab;
+  cursor: pointer;
 }
 
 .site-card.dragging {
@@ -210,6 +215,15 @@ body:not(.bg-none) .site-card:hover {
   opacity: 0.9;
   box-shadow: var(--shadow-lg);
   z-index: 1000;
+}
+
+.site-card .drag-handle {
+  cursor: grab;
+}
+
+.site-card.dragging .drag-handle,
+.site-card .drag-handle:active {
+  cursor: grabbing;
 }
 
 /* 私有标记 */

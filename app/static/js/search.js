@@ -336,6 +336,7 @@ document.addEventListener("DOMContentLoaded", function () {
         siteCard.title = site.description || "";
         siteCard.dataset.bsToggle = "tooltip";
         siteCard.dataset.bsPlacement = "bottom";
+        siteCard.draggable = false;
         siteCard.target = "_blank"; // 添加新标签页打开属性
 
         // 添加私有标记
@@ -359,6 +360,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const img = document.createElement("img");
           img.src = site.icon;
           img.alt = site.title;
+          img.draggable = false;
           img.setAttribute("referrerpolicy", "no-referrer");
           img.onerror = function() {
             this.style.display = "none";
@@ -489,6 +491,7 @@ document.addEventListener("DOMContentLoaded", function () {
         siteCard.title = site.description || "";
         siteCard.dataset.bsToggle = "tooltip";
         siteCard.dataset.bsPlacement = "bottom";
+        siteCard.draggable = false;
         siteCard.target = "_blank";
 
         if (site.is_private) {
@@ -509,6 +512,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const img = document.createElement("img");
           img.src = site.icon;
           img.alt = site.title;
+          img.draggable = false;
           img.setAttribute("referrerpolicy", "no-referrer");
           img.onerror = function() {
             this.style.display = "none";
