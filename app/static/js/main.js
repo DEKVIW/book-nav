@@ -1,14 +1,94 @@
+function collectTooltipElements(root) {
+  if (!root) {
+    return [];
+  }
+
+  if (root.matches && root.matches('[data-bs-toggle="tooltip"]')) {
+    return [root].concat(
+      Array.from(root.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    );
+  }
+
+  return Array.from(root.querySelectorAll('[data-bs-toggle="tooltip"]'));
+}
+
+function buildTooltipOptions(element) {
+  const isSiteCard = element.classList.contains("site-card");
+
+  return {
+    trigger: element.getAttribute("data-bs-trigger") || "hover",
+    placement: element.getAttribute("data-bs-placement") || "bottom",
+    fallbackPlacements: ["top"],
+    container: "body",
+    boundary: document.body,
+    html: element.getAttribute("data-bs-html") === "true",
+    animation: !isSiteCard,
+  };
+}
+
+window.initBootstrapTooltips = function (root = document) {
+  if (typeof bootstrap === "undefined" || !bootstrap.Tooltip) {
+    return [];
+  }
+
+  return collectTooltipElements(root).map(function (tooltipTriggerEl) {
+    return bootstrap.Tooltip.getOrCreateInstance(
+      tooltipTriggerEl,
+      buildTooltipOptions(tooltipTriggerEl)
+    );
+  });
+};
+
+window.hideBootstrapTooltips = function (root = document, removeOrphans = false) {
+  if (typeof bootstrap !== "undefined" && bootstrap.Tooltip) {
+    collectTooltipElements(root).forEach(function (element) {
+      const tooltipInstance = bootstrap.Tooltip.getInstance(element);
+      if (tooltipInstance) {
+        tooltipInstance.hide();
+      }
+    });
+  }
+
+  if (removeOrphans) {
+    document.body.querySelectorAll(".tooltip").forEach(function (tooltip) {
+      tooltip.remove();
+    });
+  }
+};
+
+window.disposeBootstrapTooltips = function (root = document, removeOrphans = false) {
+  if (typeof bootstrap !== "undefined" && bootstrap.Tooltip) {
+    collectTooltipElements(root).forEach(function (element) {
+      const tooltipInstance = bootstrap.Tooltip.getInstance(element);
+      if (tooltipInstance) {
+        tooltipInstance.dispose();
+      }
+    });
+  }
+
+  if (removeOrphans) {
+    document.body.querySelectorAll(".tooltip").forEach(function (tooltip) {
+      tooltip.remove();
+    });
+  }
+};
+
 // 等待文档加载完成
 document.addEventListener("DOMContentLoaded", function () {
-  // 启用所有的提示工具，允许HTML（如需可改为html: false）
-  var tooltipTriggerList = [].slice.call(
-    document.querySelectorAll('[data-bs-toggle="tooltip"]')
-  );
-  var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl, {
-      trigger: "hover",
-      html: true,
-    });
+  window.initBootstrapTooltips(document);
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      window.hideBootstrapTooltips(document, true);
+    }
+  });
+
+  window.addEventListener("blur", function () {
+    window.hideBootstrapTooltips(document, true);
+  });
+
+  window.addEventListener("pageshow", function () {
+    window.hideBootstrapTooltips(document, true);
   });
 
   // 添加导航栏滚动效果

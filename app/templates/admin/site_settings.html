@@ -718,11 +718,10 @@
                           ></button>
                         </div>
                         <div class="modal-body">
-                          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                          <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                             <div class="text-muted small">
-                              可配置多个提供方，按优先级自动轮询兜底，检测状态也会直接显示在列表里。
+                              可配置多个提供方，按优先级自动轮询兜底，检测状态会直接显示在列表里。
                             </div>
-                            <span class="ai-mgr-chip">API Key 单独一列</span>
                           </div>
                           <div id="aiProvidersModalFeedback" class="d-none mb-3"></div>
                           <div class="table-responsive ai-mgr-table-wrap">
@@ -735,7 +734,7 @@
                                   <th>接口模式</th>
                                   <th>检测状态</th>
                                   <th>优先级</th>
-                                  <th class="text-end">操作</th>
+                                  <th>操作</th>
                                 </tr>
                               </thead>
                               <tbody id="aiProvidersTableBody"></tbody>
@@ -1840,25 +1839,25 @@
       const probeLastAt = aiFormatDateTime(provider && provider.probe_last_at);
       if (provider && provider.probe_error) {
         return {
-          badgeClass: "text-bg-danger",
-          badgeText: "检测失败",
+          badgeClass: "error",
+          badgeText: "失败",
           summary: provider.probe_error,
           detail: probeLastAt ? `最近检测 ${probeLastAt}` : "请检查接口和模型目录权限",
         };
       }
       if (stats.total_models) {
         return {
-          badgeClass: "text-bg-success",
-          badgeText: "已检测",
+          badgeClass: "success",
+          badgeText: "可用",
           summary: `适配 ${stats.compatible_models || 0}/${stats.total_models || 0}`,
           detail: probeLastAt ? `最近检测 ${probeLastAt}` : "已获取模型目录",
         };
       }
       return {
-        badgeClass: "text-bg-secondary",
+        badgeClass: "idle",
         badgeText: "未检测",
         summary: "尚未获取模型目录",
-        detail: "点击检测或自动模型选型开始",
+        detail: "点击检测后更新模型可用性",
       };
     }
 
@@ -1968,7 +1967,7 @@
 
     function aiProviderStatsText(provider) {
       const probeState = aiProviderProbeState(provider);
-      return probeState.badgeText === "检测失败" ? "检测失败" : probeState.summary;
+      return probeState.badgeText === "失败" ? "失败" : probeState.summary;
     }
 
     function aiRenderProvidersTable() {
@@ -1984,7 +1983,7 @@
             ? '<span class="badge text-bg-success">启用</span>'
             : '<span class="badge text-bg-secondary">停用</span>';
           const probeState = aiProviderProbeState(provider);
-          const probeTitle = [probeState.summary, probeState.detail].filter(Boolean).join(" | ");
+          const probeTitle = [probeState.badgeText, probeState.summary, probeState.detail].filter(Boolean).join(" | ");
           return `
             <tr>
               <td>
@@ -2000,25 +1999,19 @@
                 ${aiEllipsisHtml(provider.api_key_masked || "未保存密钥", "key", "未保存密钥")}
               </td>
               <td>
-                <span class="badge text-bg-light">${aiEscapeHtml(modeLabel)}</span>
+                <span class="ai-mgr-mode-pill" title="${aiEscapeHtml(modeLabel)}">${aiEscapeHtml(modeLabel)}</span>
               </td>
               <td>
-                <div class="ai-mgr-status-stack" title="${aiEscapeHtml(probeTitle)}">
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="badge ${probeState.badgeClass}">${aiEscapeHtml(probeState.badgeText)}</span>
-                    <span class="small text-muted">${aiEllipsisHtml(probeState.summary, "status", probeState.summary)}</span>
-                  </div>
-                  <div class="small text-muted mt-1">
-                    ${aiEllipsisHtml(probeState.detail, "status", probeState.detail)}
-                  </div>
+                <div class="ai-mgr-provider-probe" title="${aiEscapeHtml(probeTitle)}">
+                  <span class="ai-mgr-status-light ${probeState.badgeClass}" aria-hidden="true"></span>
+                  <span class="ai-mgr-provider-probe-text ${probeState.badgeClass}">${aiEscapeHtml(probeState.badgeText)}</span>
                 </div>
               </td>
-              <td class="text-center">${aiEscapeHtml(String(provider.priority || 100))}</td>
-              <td class="text-end">
-                <div class="ai-mgr-action-group ai-mgr-action-group-end">
+              <td>${aiEscapeHtml(String(provider.priority || 100))}</td>
+              <td>
+                <div class="ai-mgr-action-group">
                   <button type="button" class="btn btn-outline-secondary btn-sm" data-action="edit" data-provider-id="${provider.id}">编辑</button>
                   <button type="button" class="btn btn-outline-primary btn-sm" data-action="detect" data-provider-id="${provider.id}">检测</button>
-                  <button type="button" class="btn btn-outline-success btn-sm" data-action="test" data-provider-id="${provider.id}">测试</button>
                   <button type="button" class="btn btn-outline-danger btn-sm" data-action="delete" data-provider-id="${provider.id}">删除</button>
                 </div>
               </td>
@@ -2402,32 +2395,6 @@
           return;
         }
 
-        if (action === "test") {
-          button.disabled = true;
-          fetch(`{{ url_for('admin.test_ai_provider', provider_id=0) }}`.replace("/0/test", `/${providerId}/test`), {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRFToken": aiCsrfToken(),
-            },
-            body: JSON.stringify({}),
-          })
-            .then((response) => response.json())
-            .then((data) => {
-              aiShowFeedback(
-                aiProvidersModalFeedback,
-                data.success ? "success" : "danger",
-                data.message,
-                true
-              );
-            })
-            .catch((error) => {
-              aiShowFeedback(aiProvidersModalFeedback, "danger", `测试失败: ${error.message}`, true);
-            })
-            .finally(() => {
-              button.disabled = false;
-            });
-        }
       });
     }
 
@@ -3169,7 +3136,8 @@
   }
 
   .ai-mgr-table {
-    min-width: 980px;
+    width: max-content;
+    min-width: 100%;
     table-layout: auto;
     margin-bottom: 0;
   }
@@ -3186,6 +3154,7 @@
     font-weight: 700;
     color: #475569;
     background: rgba(248, 250, 252, 0.92);
+    text-align: left;
   }
 
   .ai-mgr-table td {
@@ -3196,8 +3165,40 @@
     min-width: 150px;
   }
 
-  .ai-mgr-status-stack {
-    min-width: 220px;
+  .ai-mgr-provider-probe {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 86px;
+  }
+
+  .ai-mgr-provider-probe-text {
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .ai-mgr-provider-probe-text.idle {
+    color: #64748b;
+  }
+
+  .ai-mgr-provider-probe-text.success {
+    color: #15803d;
+  }
+
+  .ai-mgr-provider-probe-text.error {
+    color: #b91c1c;
+  }
+
+  .ai-mgr-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid #dbe4f0;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.76rem;
+    font-weight: 600;
   }
 
   .ai-mgr-overview-section + .ai-mgr-overview-section {
@@ -3209,10 +3210,6 @@
     align-items: center;
     gap: 0.4rem;
     flex-wrap: nowrap;
-  }
-
-  .ai-mgr-action-group-end {
-    justify-content: flex-end;
   }
 
   .ai-mgr-ellipsis {
@@ -3229,11 +3226,11 @@
   }
 
   .ai-mgr-ellipsis.url {
-    max-width: 270px;
+    max-width: 250px;
   }
 
   .ai-mgr-ellipsis.key {
-    max-width: 210px;
+    max-width: 132px;
   }
 
   .ai-mgr-ellipsis.status {

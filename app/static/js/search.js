@@ -294,6 +294,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // 销毁所有 tooltip 实例
   function _disposeAllTooltips() {
+    if (typeof window.disposeBootstrapTooltips === "function") {
+      window.disposeBootstrapTooltips(resultsContent, true);
+      return;
+    }
+
     if (typeof bootstrap !== "undefined") {
       const tooltipElements = resultsContent.querySelectorAll(
         '[data-bs-toggle="tooltip"]'
@@ -304,9 +309,7 @@ document.addEventListener("DOMContentLoaded", function () {
           tooltipInstance.dispose();
         }
       });
-      // 清理可能残留在 body 中的 tooltip DOM 元素
-      const orphanTooltips = document.body.querySelectorAll(".tooltip");
-      orphanTooltips.forEach(function (tooltip) {
+      document.body.querySelectorAll(".tooltip").forEach(function (tooltip) {
         tooltip.remove();
       });
     }
@@ -419,20 +422,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       // 初始化工具提示（只初始化新添加的元素，避免重复初始化）
-      if (typeof bootstrap !== "undefined") {
-        const tooltipTriggerList = [].slice.call(
-          resultsContent.querySelectorAll('[data-bs-toggle="tooltip"]')
-        );
-        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-          // 检查是否已经初始化过 tooltip
-          if (!bootstrap.Tooltip.getInstance(tooltipTriggerEl)) {
-            new bootstrap.Tooltip(tooltipTriggerEl, {
-              trigger: "hover", // 悬停时显示
-              placement: "bottom", // 在下方显示
-              fallbackPlacements: ["top"] // 如果下方空间不够，显示在上方
-            });
-          }
-        });
+      if (typeof window.initBootstrapTooltips === "function") {
+        window.initBootstrapTooltips(resultsContent);
       }
     } else {
       resultsContent.innerHTML =
@@ -576,15 +567,8 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         // 初始化工具提示（确保不会重复初始化）
-        if (typeof bootstrap !== "undefined") {
-          // 检查是否已经初始化过 tooltip
-          if (!bootstrap.Tooltip.getInstance(siteCard)) {
-            new bootstrap.Tooltip(siteCard, {
-              trigger: "hover", // 悬停时显示
-              placement: "bottom", // 在下方显示
-              fallbackPlacements: ["top"] // 如果下方空间不够，显示在上方
-            });
-          }
+        if (typeof window.initBootstrapTooltips === "function") {
+          window.initBootstrapTooltips(siteCard);
         }
       }, index * 80); // 每个卡片延迟 80ms，形成流畅的渐进式效果
     });

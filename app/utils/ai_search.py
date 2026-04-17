@@ -3,11 +3,12 @@
 """AI search and content utility services."""
 
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-from flask import current_app
+from flask import current_app, has_app_context
 
 
 AI_SEARCH_PROMPT_TEMPLATE = """You are a website search assistant.
@@ -96,6 +97,15 @@ AI_INTERFACE_MODE_VALUES = {
     AI_INTERFACE_MODE_RESPONSES,
 }
 
+AI_REQUEST_TIMEOUT = (15, 60)
+AI_STREAM_REQUEST_TIMEOUT = (15, 90)
+
+
+def _get_logger():
+    if has_app_context():
+        return current_app.logger
+    return logging.getLogger(__name__)
+
 
 class AIFailoverService:
     """Try multiple configured AI services in order until one succeeds."""
@@ -140,7 +150,7 @@ class AIFailoverService:
                 provider_name = getattr(service, "provider_name", "") or "AI"
                 model_name = getattr(service, "model_name", "") or "unknown"
                 errors.append(f"{provider_name}/{model_name}: {str(exc)}")
-                current_app.logger.warning(
+                _get_logger().warning(
                     "AI failover attempt failed for %s via %s/%s: %s",
                     method_name,
                     provider_name,
@@ -265,7 +275,7 @@ class AISearchService:
                     }
                 )
                 if self._should_try_next_attempt(exc):
-                    current_app.logger.warning(
+                    _get_logger().warning(
                         "AI request via %s failed for model %s, falling back: %s",
                         attempt_name,
                         self.model_name,
@@ -361,9 +371,148 @@ class AISearchService:
     def _should_try_next_attempt(self, error: Exception) -> bool:
         if isinstance(error, (AICompatibilityError, AIEmptyResponseError, AIJSONParseError)):
             return True
+        if isinstance(error, ValueError):
+            return True
         if isinstance(error, requests.exceptions.HTTPError):
             return self._is_retryable_http_error(error.response)
         return False
+
+    def _response_looks_like_sse(self, response: Optional[requests.Response]) -> bool:
+        if response is None:
+            return False
+
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        if "text/event-stream" in content_type:
+            return True
+
+        preview = (response.text or "").lstrip("\ufeff\r\n\t ")
+        return preview.startswith("data:") or preview.startswith("event:")
+
+    def _iter_sse_payloads(self, response: requests.Response):
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if raw_line is None:
+                continue
+            line = raw_line.strip()
+            if not line or line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                continue
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if not line:
+                continue
+            if line == "[DONE]":
+                break
+
+            try:
+                payload = json.loads(line)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+
+            if isinstance(payload, dict):
+                yield payload
+
+    def _parse_chat_sse_response(self, response: requests.Response) -> dict:
+        text_parts: List[str] = []
+        has_event_payload = False
+
+        for payload in self._iter_sse_payloads(response):
+            has_event_payload = True
+            text_parts.extend(self._extract_chat_stream_text_parts(payload))
+
+        aggregated_text = "".join(text_parts).strip()
+        if aggregated_text:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": aggregated_text,
+                        }
+                    }
+                ]
+            }
+
+        if has_event_payload:
+            raise AIEmptyResponseError("Chat 流式返回成功，但没有拼接出可用文本")
+        raise AICompatibilityError("Chat 流式返回格式异常，未收到可解析的事件数据")
+
+    def _extract_responses_sse_snapshot_text(self, payload: Dict[str, Any]) -> str:
+        if not isinstance(payload, dict):
+            return ""
+
+        for key in ("text", "part", "item", "response", "output_text", "output"):
+            if key not in payload:
+                continue
+            text = self._coerce_content_to_text(payload.get(key))
+            if text:
+                return text
+        return ""
+
+    def _parse_responses_sse_response(self, response: requests.Response) -> dict:
+        delta_parts: List[str] = []
+        snapshot_text = ""
+        final_response: Optional[Dict[str, Any]] = None
+        has_event_payload = False
+
+        for payload in self._iter_sse_payloads(response):
+            has_event_payload = True
+            payload_type = str(payload.get("type") or "")
+            if payload_type.endswith(".delta"):
+                delta_text = self._coerce_stream_content_to_text(payload.get("delta"))
+                if delta_text:
+                    delta_parts.append(delta_text)
+                    continue
+
+            snapshot_candidate = self._extract_responses_sse_snapshot_text(payload)
+            if snapshot_candidate:
+                snapshot_text = snapshot_candidate
+
+            response_payload = payload.get("response")
+            if isinstance(response_payload, dict) and payload_type.startswith("response."):
+                final_response = response_payload
+
+        aggregated_text = "".join(delta_parts).strip() or snapshot_text.strip()
+        if final_response:
+            normalized_response = dict(final_response)
+            if aggregated_text and not self._coerce_content_to_text(normalized_response.get("output_text")):
+                normalized_response["output_text"] = aggregated_text
+            if aggregated_text and not self._coerce_content_to_text(normalized_response.get("output")):
+                normalized_response["output"] = [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": aggregated_text,
+                            }
+                        ],
+                    }
+                ]
+            return normalized_response
+
+        if aggregated_text:
+            return {
+                "output_text": aggregated_text,
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": aggregated_text,
+                            }
+                        ],
+                    }
+                ],
+            }
+
+        if has_event_payload:
+            raise AIEmptyResponseError("Responses 流式返回成功，但没有拼接出可用文本")
+        raise AICompatibilityError("Responses 流式返回格式异常，未收到可解析的事件数据")
 
     def _is_retryable_http_error(self, response: Optional[requests.Response]) -> bool:
         if response is None:
@@ -402,22 +551,31 @@ class AISearchService:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        request_data = dict(data)
+        request_data.setdefault("stream", False)
+        response: Optional[requests.Response] = None
 
         try:
-            response = requests.post(url, json=data, headers=headers, timeout=30)
+            response = requests.post(url, json=request_data, headers=headers, timeout=AI_REQUEST_TIMEOUT)
             response.raise_for_status()
-            payload = response.json()
-            if data.get("response_format", {}).get("type") == "json_object":
+            if self._response_looks_like_sse(response):
+                _get_logger().warning(
+                    "AI provider returned SSE for chat/completions with stream disabled; parsing as stream"
+                )
+                payload = self._parse_chat_sse_response(response)
+            else:
+                payload = response.json()
+            if request_data.get("response_format", {}).get("type") == "json_object":
                 self._json_object_response_format_supported = True
             return payload
         except requests.exceptions.HTTPError as exc:
             response = exc.response
             if allow_json_mode_fallback and self._should_retry_without_json_mode(response):
                 self._json_object_response_format_supported = False
-                current_app.logger.warning(
+                _get_logger().warning(
                     "AI provider rejected response_format=json_object; retrying without it"
                 )
-                fallback_data = dict(data)
+                fallback_data = dict(request_data)
                 fallback_data.pop("response_format", None)
                 return self._post_chat_completion(
                     fallback_data,
@@ -426,13 +584,13 @@ class AISearchService:
                 )
             if (
                 allow_temperature_fallback
-                and "temperature" in data
+                and "temperature" in request_data
                 and self._should_retry_without_temperature(response)
             ):
-                current_app.logger.warning(
+                _get_logger().warning(
                     "AI provider rejected temperature for chat/completions; retrying without it"
                 )
-                fallback_data = dict(data)
+                fallback_data = dict(request_data)
                 fallback_data.pop("temperature", None)
                 return self._post_chat_completion(
                     fallback_data,
@@ -455,52 +613,12 @@ class AISearchService:
             url,
             json=stream_data,
             headers=headers,
-            timeout=30,
+            timeout=AI_STREAM_REQUEST_TIMEOUT,
             stream=True,
         )
         response.raise_for_status()
+        return self._parse_chat_sse_response(response)
 
-        text_parts: List[str] = []
-        has_event_payload = False
-
-        for raw_line in response.iter_lines(decode_unicode=True):
-            if raw_line is None:
-                continue
-            line = raw_line.strip()
-            if not line or line.startswith(":"):
-                continue
-            if line.startswith("event:"):
-                continue
-            if line.startswith("data:"):
-                line = line[5:].strip()
-            if not line:
-                continue
-            if line == "[DONE]":
-                break
-
-            try:
-                payload = json.loads(line)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                continue
-
-            has_event_payload = True
-            text_parts.extend(self._extract_chat_stream_text_parts(payload))
-
-        aggregated_text = "".join(text_parts).strip()
-        if aggregated_text:
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "content": aggregated_text,
-                        }
-                    }
-                ]
-            }
-
-        if has_event_payload:
-            raise AIEmptyResponseError("Chat 流式返回成功，但没有拼接出可用文本")
-        raise AICompatibilityError("Chat 流式返回格式异常，未收到可解析的事件数据")
     def _build_responses_request(
         self,
         messages: List[dict],
@@ -563,19 +681,26 @@ class AISearchService:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        request_data = dict(data)
+        request_data.setdefault("stream", False)
 
         try:
-            response = requests.post(url, json=data, headers=headers, timeout=30)
+            response = requests.post(url, json=request_data, headers=headers, timeout=AI_REQUEST_TIMEOUT)
             response.raise_for_status()
+            if self._response_looks_like_sse(response):
+                _get_logger().warning(
+                    "AI provider returned SSE for responses with stream disabled; parsing as stream"
+                )
+                return self._parse_responses_sse_response(response)
             return response.json()
         except requests.exceptions.HTTPError as exc:
             response = exc.response
             if (
                 allow_instructions_fallback
-                and "instructions" in data
+                and "instructions" in request_data
                 and self._should_retry_without_instructions(response)
             ):
-                fallback_data = dict(data)
+                fallback_data = dict(request_data)
                 fallback_data.pop("instructions", None)
                 return self._post_responses(
                     fallback_data,
@@ -587,10 +712,10 @@ class AISearchService:
                 )
             if (
                 allow_temperature_fallback
-                and "temperature" in data
+                and "temperature" in request_data
                 and self._should_retry_without_temperature(response)
             ):
-                fallback_data = dict(data)
+                fallback_data = dict(request_data)
                 fallback_data.pop("temperature", None)
                 return self._post_responses(
                     fallback_data,
@@ -602,10 +727,10 @@ class AISearchService:
                 )
             if (
                 allow_legacy_max_tokens_fallback
-                and "max_output_tokens" in data
+                and "max_output_tokens" in request_data
                 and self._should_retry_responses_with_legacy_max_tokens(response)
             ):
-                fallback_data = dict(data)
+                fallback_data = dict(request_data)
                 fallback_data["max_tokens"] = fallback_data.pop("max_output_tokens")
                 return self._post_responses(
                     fallback_data,
@@ -620,7 +745,7 @@ class AISearchService:
                 and fallback_prompt
                 and self._should_retry_responses_with_flat_prompt(response)
             ):
-                fallback_data = dict(data)
+                fallback_data = dict(request_data)
                 fallback_data["input"] = fallback_prompt
                 return self._post_responses(
                     fallback_data,
@@ -1204,7 +1329,7 @@ class AISearchService:
             intent_result = self._parse_json_response(content)
             return self._normalize_intent_result(intent_result, user_query)
         except Exception as exc:
-            current_app.logger.error(f"AI 意图分析失败: {str(exc)}")
+            _get_logger().error(f"AI 意图分析失败: {str(exc)}")
             raise
 
     def recommend_websites(
@@ -1276,7 +1401,7 @@ class AISearchService:
                 result["recommendations"] = result["recommendations"][:max_recommendations]
             return result
         except Exception as exc:
-            current_app.logger.error(f"AI 推荐失败: {str(exc)}")
+            _get_logger().error(f"AI 推荐失败: {str(exc)}")
             raise
 
     def translate_text(self, text: str, target_lang: str = "zh") -> str:
@@ -1309,7 +1434,7 @@ class AISearchService:
                 raise AIEmptyResponseError("AI 返回了空的翻译结果")
             return translated
         except Exception as exc:
-            current_app.logger.error(f"AI 翻译失败: {str(exc)}")
+            _get_logger().error(f"AI 翻译失败: {str(exc)}")
             raise Exception(f"翻译失败: {str(exc)}")
 
     def generate_website_info(self, url: str) -> dict:
@@ -1333,7 +1458,7 @@ class AISearchService:
             parsed = self._parse_json_response(content)
             return self._normalize_website_info_result(parsed)
         except Exception as exc:
-            current_app.logger.error(f"AI 生成网站信息失败: {str(exc)}")
+            _get_logger().error(f"AI 生成网站信息失败: {str(exc)}")
             raise Exception(f"生成网站信息失败: {str(exc)}")
 
 def _legacy_model_from_settings(settings, task: Optional[str] = None) -> Optional[str]:
@@ -1563,5 +1688,5 @@ def create_ai_service_from_settings(
             return services[0]
         return AIFailoverService(services)
     except Exception as exc:
-        current_app.logger.error(f"创建 AI 服务失败: {str(exc)}")
+        _get_logger().error(f"创建 AI 服务失败: {str(exc)}")
         return None

@@ -788,21 +788,4 @@ head %}
 <script src="{{ url_for('static', filename='js/duplicateLinkHandler.js') }}"></script>
 {% endif %}
 
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    // 初始化所有Bootstrap tooltips
-    var tooltipTriggerList = [].slice.call(
-      document.querySelectorAll('[data-bs-toggle="tooltip"]')
-    );
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl, {
-        placement: "bottom",
-        fallbackPlacements: ["top"],
-        trigger: "hover",
-      });
-    });
-
-    // 注意：图标错误处理已移至base.html全局处理
-  });
-</script>
 {% endblock %}

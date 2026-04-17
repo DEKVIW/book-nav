@@ -13,7 +13,11 @@
   padding: 0.8rem;
   text-decoration: none;
   color: var(--text-primary);
-  transition: all 0.3s ease;
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    opacity 0.2s ease;
   border: 1px solid transparent;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   position: relative;
@@ -93,7 +97,6 @@ body:not(.bg-none) .site-card:hover {
   justify-content: center;
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.04);
-  transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
 }
@@ -107,14 +110,13 @@ body:not(.bg-none) .site-card:hover {
 .site-icon i {
   font-size: 24px;
   color: var(--primary-color);
-  transition: all 0.3s ease;
+  transition: color 0.25s ease;
 }
 
 /* 网站文本 */
 .site-text {
   flex: 1;
   min-width: 0;
-  transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -149,7 +151,9 @@ body:not(.bg-none) .site-card:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.3;
-  transition: opacity 0.3s ease;
+  transition:
+    color 0.25s ease,
+    opacity 0.25s ease;
   word-break: break-word;
   max-width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -242,7 +246,9 @@ body:not(.bg-none) .site-card:hover {
   width: 24px;
   height: 24px;
   z-index: 3;
-  transition: all 0.3s ease;
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
 .site-card:hover .private-badge {
