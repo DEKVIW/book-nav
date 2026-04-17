@@ -3,6 +3,7 @@
 .gitignore
 
 # 数据库和数据文件
+data/
 app.db
 *.db
 *.db3
@@ -59,6 +60,8 @@ app/static/uploads/
 
 # Docker相关
 .dockerignore
+docker-compose.yml
+docker-compose.prod.yml
 docker-compose.override.yml
 
 # 临时文件
@@ -70,11 +73,14 @@ docker-compose.override.yml
 
 # 文档目录（不需要在镜像中）
 docs/
+img/
 
 # 参考项目（不需要在镜像中）
 PixelPunk/
+config/
 
 # 测试和开发脚本（运行时不需要）
+tests/
 test_*.py
 *_test.py
 batch_generate_vectors.py

@@ -4,7 +4,6 @@
 
 import json
 import requests
-import numpy as np
 from typing import List, Dict, Optional, Tuple
 from flask import current_app
 from qdrant_client import QdrantClient

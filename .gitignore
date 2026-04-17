@@ -39,6 +39,7 @@ instance/
 flask_session/
 
 # Database
+data/
 *.db
 *.db-shm
 *.db-wal
