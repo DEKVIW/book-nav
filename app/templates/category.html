@@ -1133,16 +1133,8 @@ DEBUG - Settings信息:
 
     // 重新绑定卡片事件
     function rebindCardEvents() {
-      // 初始化工具提示
-      if (typeof bootstrap !== "undefined") {
-        const tooltipTriggerList = [].slice.call(
-          document.querySelectorAll('[data-bs-toggle="tooltip"]')
-        );
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-          return new bootstrap.Tooltip(tooltipTriggerEl, {
-            trigger: "hover",
-          });
-        });
+      if (typeof window.initBootstrapTooltips === "function") {
+        window.initBootstrapTooltips(sitesContainer);
       }
 
       // 如果有拖拽功能，重新初始化
