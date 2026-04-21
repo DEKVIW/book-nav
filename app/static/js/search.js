@@ -337,8 +337,6 @@ document.addEventListener("DOMContentLoaded", function () {
         siteCard.className = "site-card";
         siteCard.dataset.id = site.id;
         siteCard.title = site.description || "";
-        siteCard.dataset.bsToggle = "tooltip";
-        siteCard.dataset.bsPlacement = "bottom";
         siteCard.draggable = false;
         siteCard.target = "_blank"; // 添加新标签页打开属性
 
@@ -480,8 +478,6 @@ document.addEventListener("DOMContentLoaded", function () {
         siteCard.className = "site-card";
         siteCard.dataset.id = site.id;
         siteCard.title = site.description || "";
-        siteCard.dataset.bsToggle = "tooltip";
-        siteCard.dataset.bsPlacement = "bottom";
         siteCard.draggable = false;
         siteCard.target = "_blank";
 

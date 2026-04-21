@@ -473,6 +473,7 @@ DEBUG - Settings信息:
             type="search"
             id="categorySearchInput"
             class="category-search-input"
+            data-bwignore="true"
             placeholder="搜索{{ category.name }}分类内网站..."
           />
           <button
@@ -582,8 +583,6 @@ DEBUG - Settings信息:
         data-description="{{ website.description }}"
         data-sort="{{ website.sort_order|default(loop.index0*10) }}"
         title="{{ website.description }}"
-        data-bs-toggle="tooltip"
-        data-bs-placement="bottom"
         draggable="false"
         target="_blank"
       >
@@ -676,7 +675,7 @@ DEBUG - Settings信息:
         <div class="row g-3">
           <div class="col-md-12">
             <label class="form-label">网站标题</label>
-            <input type="text" id="editTitle" class="form-control" required />
+            <input type="text" id="editTitle" class="form-control" required data-bwignore="true" />
           </div>
 
           <div class="col-md-12">
@@ -684,7 +683,7 @@ DEBUG - Settings信息:
               >所属分类 <span class="text-danger">*</span></label
             >
             <div class="category-select-container">
-              <select id="editCategory" class="form-select" required>
+              <select id="editCategory" class="form-select" required data-bwignore="true">
                 <option value="">请选择分类</option>
                 {% for category in all_categories %} {% if category.parent_id is
                 none %}
@@ -701,7 +700,7 @@ DEBUG - Settings信息:
           <div class="col-md-12">
             <label class="form-label">链接地址</label>
             <div class="input-group">
-              <input type="url" id="editUrl" class="form-control" required />
+              <input type="url" id="editUrl" class="form-control" required data-bwignore="true" />
               <button
                 type="button"
                 id="fetchInfo"
@@ -737,6 +736,7 @@ DEBUG - Settings信息:
                 type="url"
                 id="editIcon"
                 class="form-control"
+                data-bwignore="true"
                 placeholder="图标URL（自动获取）"
               />
             </div>
@@ -748,6 +748,7 @@ DEBUG - Settings信息:
               <textarea
                 id="editDescription"
                 class="form-control"
+                data-bwignore="true"
                 rows="1"
                 placeholder="简要描述网站内容和功能"
                 style="resize: vertical; padding-right: 2.5rem;"
@@ -791,6 +792,7 @@ DEBUG - Settings信息:
                       type="radio"
                       name="editPrivacy"
                       id="editPublic"
+                      data-bwignore="true"
                       value="0"
                       checked
                     />
@@ -804,6 +806,7 @@ DEBUG - Settings信息:
                       type="radio"
                       name="editPrivacy"
                       id="editPrivate"
+                      data-bwignore="true"
                       value="1"
                     />
                     <label class="form-check-label" for="editPrivate">
@@ -818,6 +821,7 @@ DEBUG - Settings信息:
                   type="number"
                   id="editWeight"
                   class="form-control form-control-sm"
+                  data-bwignore="true"
                   min="0"
                   max="9999"
                   value="0"
@@ -828,7 +832,7 @@ DEBUG - Settings信息:
             </div>
           </div>
 
-          <input type="hidden" id="editLinkId" />
+          <input type="hidden" id="editLinkId" data-bwignore="true" />
         </div>
       </form>
     </div>
@@ -1061,8 +1065,6 @@ DEBUG - Settings信息:
       card.dataset.id = website.id;
       card.dataset.sort = website.sort_order;
       card.title = website.description || "";
-      card.dataset.bsToggle = "tooltip";
-      card.dataset.bsPlacement = "bottom";
       card.draggable = false;
 
       // 添加私有标记
