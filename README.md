@@ -380,3 +380,8 @@ MIT License - 详见 LICENSE 文件
 ## 社区
 
 [Linux.do](https://linux.do/)
+
+## Browser Compatibility
+
+- Chrome / Chromium 浏览器在启用 Bitwarden 扩展时，网站卡片 Tooltip 会导致标签切换卡顿。
+- 详细说明、排查结论、油猴脚本方案以及用户脚本注入权限排查见：[浏览器扩展兼容性说明](./docs/BROWSER_EXTENSION_COMPATIBILITY.md)
