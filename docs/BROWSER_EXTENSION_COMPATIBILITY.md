@@ -1,25 +1,33 @@
 # 浏览器扩展兼容性说明
 
-## Bitwarden 与卡片 Tooltip 冲突
+## 更新说明：推荐保留浏览器原生 `title`
 
-### 现象
+针对 `Bitwarden + 卡片 Tooltip` 导致的 Chrome / Chromium 标签切换卡顿问题，当前更推荐采用下面的方案：
 
-在 Chrome / Chromium 内核浏览器中，如果 `Bitwarden` 扩展处于开启状态，同时导航站首页或分类页的网站卡片启用了悬停 Tooltip，可能出现以下问题：
+1. 禁用卡片自定义 Tooltip
+2. 保留卡片 hover 样式、拖拽排序、右键菜单等其他交互
+3. 如仍需要提示文本，优先保留浏览器原生 `title`，不要继续使用自定义 Tooltip
+
+原因是浏览器原生 `title` 不需要额外创建 Tooltip 浮层节点，也不需要 hover 时做额外的 JS 定位和重排，和 Bitwarden 的冲突概率更低。
+
+## 现象
+
+在 Chrome / Chromium 内核浏览器中，如果 `Bitwarden` 扩展处于开启状态，同时导航站首页、分类页或搜索结果页中的网站卡片启用了 Tooltip，可能出现以下问题：
 
 - 鼠标连续悬停多张网站卡片后，切换浏览器标签页明显卡顿
 - 卡顿会随着 hover 次数增加而变得更明显
 - 同一环境下，关闭 Bitwarden 后现象通常会明显减轻或消失
 
-### 排查结论
+## 排查结论
 
 本项目已针对该问题做过多轮排查，结论如下：
 
 - 冲突点不局限于 `Bootstrap Tooltip`
 - 即使改为项目内自定义 Tooltip，只要卡片 hover 期间仍有 Tooltip 浮层相关的 DOM / 事件链路，问题仍可能复现
-- 临时移除网站卡片上的 Tooltip 属性后，卡顿现象可明显缓解
 - 拖拽排序本身不是主要根因，真正高相关的是“卡片 hover + Tooltip + Bitwarden 扫描”
+- 最稳妥的规避方式是：不要让网站卡片继续使用自定义 Tooltip 链路
 
-### 影响范围
+## 影响范围
 
 重点影响以下场景：
 
@@ -27,22 +35,20 @@
 - 分类页网站卡片
 - 搜索结果中动态渲染的网站卡片
 
-### 建议处理
+## 本地临时验证方法
 
-推荐按下面顺序处理：
-
-1. 优先禁用网站卡片 Tooltip
-2. 保留卡片 hover 样式、拖拽排序、右键菜单等其他交互
-3. 如果必须做本地兼容处理，优先使用用户脚本在浏览器侧移除卡片 Tooltip，而不是继续叠加新的 Tooltip 实现
-
-### 本地验证方法
-
-可以先在浏览器控制台执行以下代码，临时禁用当前页面的卡片 Tooltip：
+可以先在浏览器控制台执行以下代码，把卡片的自定义 Tooltip 降级为原生 `title`：
 
 ```js
 document.querySelectorAll('.site-card').forEach((el) => {
+  const customText = el.getAttribute('data-tooltip');
+  const nativeText = el.getAttribute('title');
+
+  if (customText && !nativeText) {
+    el.setAttribute('title', customText);
+  }
+
   el.removeAttribute('data-tooltip');
-  el.removeAttribute('title');
 });
 
 document.querySelectorAll('.site-card-tooltip, .tooltip').forEach((el) => {
@@ -50,39 +56,29 @@ document.querySelectorAll('.site-card-tooltip, .tooltip').forEach((el) => {
 });
 ```
 
-然后用以下命令检查是否仍有卡片 Tooltip 残留：
+然后执行以下命令检查页面中是否仍残留自定义 Tooltip：
 
 ```js
 document.querySelectorAll(
-  '.site-card[data-tooltip], .site-card[title], .site-card-tooltip, .tooltip'
+  '.site-card[data-tooltip], .site-card-tooltip, .tooltip'
 ).length
 ```
 
 如果返回值为 `0`，再重复执行“多次悬停卡片 -> 切换浏览器标签页”的操作，观察卡顿是否明显减轻。
 
-### 用户脚本注意事项
+## 用户脚本方案
 
-如果使用 `Tampermonkey` / `Violentmonkey` 一类用户脚本扩展做本地兼容，请确认扩展本身已经具备注入权限，否则脚本可能显示“已启用”但实际上未生效。
-
-需要重点检查：
-
-- 已开启浏览器扩展的开发者模式
-- 已开启脚本扩展的“允许运行用户脚本”
-- 站点访问权限已覆盖目标站点
-
-### 推荐用户脚本
-
-如果希望在本地浏览器中长期禁用导航站卡片 Tooltip，可以使用下面这份最小用户脚本。
+如果希望在本地浏览器中长期保留“原生 `title` Tooltip”并禁用卡片自定义 Tooltip，可以使用下面这份最小用户脚本。
 
 适用站点：
 
 - `https://nav.yilancn.top/`
 
-脚本内容：
+### 推荐用户脚本
 
 ```javascript
 // ==UserScript==
-// @name         nav disable card tooltips
+// @name         nav keep native title tooltip only
 // @namespace    nav-fix
 // @version      1.0
 // @match        *://nav.yilancn.top/*
@@ -93,33 +89,37 @@ document.querySelectorAll(
 (function () {
   "use strict";
 
-  function disableCardTooltips(root = document) {
-    const nodes = [];
+  function normalizeCardTooltips(root = document) {
+    const cards = [];
 
-    if (root.nodeType === 1 && root.matches(".site-card, .site-card .drag-handle, .site-card .private-badge")) {
-      nodes.push(root);
+    if (root.nodeType === 1 && root.matches(".site-card")) {
+      cards.push(root);
     }
 
     if (root.querySelectorAll) {
-      nodes.push(
-        ...root.querySelectorAll(".site-card, .site-card .drag-handle, .site-card .private-badge")
-      );
+      cards.push(...root.querySelectorAll(".site-card"));
     }
 
-    nodes.forEach((el) => {
+    cards.forEach((el) => {
+      const customText = el.getAttribute("data-tooltip");
+      const nativeText = el.getAttribute("title");
+
+      if (customText && !nativeText) {
+        el.setAttribute("title", customText);
+      }
+
       el.removeAttribute("data-tooltip");
-      el.removeAttribute("title");
     });
 
     document.querySelectorAll(".site-card-tooltip, .tooltip").forEach((el) => el.remove());
   }
 
   function showBadge() {
-    if (document.getElementById("nav-tooltip-off")) return;
+    if (document.getElementById("nav-tooltip-native")) return;
 
     const el = document.createElement("div");
-    el.id = "nav-tooltip-off";
-    el.textContent = "Tooltip 已关闭";
+    el.id = "nav-tooltip-native";
+    el.textContent = "已切换为浏览器原生 Tooltip";
     el.style.cssText = [
       "position:fixed",
       "right:16px",
@@ -138,8 +138,8 @@ document.querySelectorAll(
   }
 
   function applyAll(root = document) {
-    disableCardTooltips(root);
-    document.documentElement.setAttribute("data-nav-tooltip-disabled", "true");
+    normalizeCardTooltips(root);
+    document.documentElement.setAttribute("data-nav-tooltip-mode", "native-title");
     showBadge();
   }
 
@@ -176,33 +176,33 @@ document.querySelectorAll(
 })();
 ```
 
-### 用户脚本安装步骤
+## 用户脚本安装步骤
 
 1. 安装 `Tampermonkey` 或 `Violentmonkey`
 2. 新建脚本
 3. 将上面的脚本完整粘贴进去并保存
 4. 刷新 `https://nav.yilancn.top/`
-5. 观察页面右下角是否出现 `Tooltip 已关闭`
+5. 观察页面右下角是否出现 `已切换为浏览器原生 Tooltip`
 
-### 用户脚本验证方法
+## 用户脚本验证方法
 
 保存脚本并刷新页面后，可以在控制台执行以下命令确认脚本已经生效：
 
 ```js
-document.documentElement.getAttribute('data-nav-tooltip-disabled')
+document.documentElement.getAttribute('data-nav-tooltip-mode')
 ```
 
 预期返回：
 
 ```js
-"true"
+"native-title"
 ```
 
 再执行：
 
 ```js
 document.querySelectorAll(
-  '.site-card[data-tooltip], .site-card[title], .site-card .drag-handle[title], .site-card .private-badge[title], .site-card-tooltip, .tooltip'
+  '.site-card[data-tooltip], .site-card-tooltip, .tooltip'
 ).length
 ```
 
@@ -212,7 +212,15 @@ document.querySelectorAll(
 0
 ```
 
-### 已确认会踩的坑
+如果还想确认卡片是否保留了原生 `title`，可以再执行：
+
+```js
+document.querySelectorAll('.site-card[title]').length
+```
+
+正常情况下，这个值通常会大于 `0`。
+
+## 已确认会踩的坑
 
 这次排查中，已经确认以下问题会导致“脚本看起来已启用，但实际上没有注入页面”：
 
@@ -233,8 +241,8 @@ document.querySelectorAll(
 
 - 扩展面板里脚本显示“已启用”
 - 但页面控制台验证失败
-- 页面右下角也不会出现“Tooltip 已关闭”
+- 页面右下角也不会出现提示标记
 
-### 备注
+## 备注
 
 这个问题更偏向“浏览器扩展兼容性问题”，不代表项目的拖拽、搜索或普通卡片渲染逻辑本身存在同等级别的性能缺陷。实际处理时，应优先从 Tooltip 兼容性角度规避。
