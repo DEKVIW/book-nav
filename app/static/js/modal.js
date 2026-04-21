@@ -357,6 +357,7 @@ document.addEventListener("DOMContentLoaded", function () {
             "data-description",
             description.trim()
           );
+          window.currentCard.setAttribute("data-tooltip", description.trim());
         }
 
         if (supportsDetailedProgress) {

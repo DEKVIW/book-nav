@@ -266,7 +266,7 @@ head %}
             data-website-id="{{ website.id }}"
             data-website-url="{{ website.url }}"
             data-sort="{{ website.sort_order|default(loop.index0*10) }}"
-            title="{{ website.description }}"
+            data-tooltip="{{ website.description or '' }}"
             draggable="false"
             target="_blank"
           >

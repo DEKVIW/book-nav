@@ -294,6 +294,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // 销毁所有 tooltip 实例
   function _disposeAllTooltips() {
+    if (typeof window.hideSiteCardTooltip === "function") {
+      window.hideSiteCardTooltip();
+    }
+
     if (typeof window.disposeBootstrapTooltips === "function") {
       window.disposeBootstrapTooltips(resultsContent, true);
       return;
@@ -336,7 +340,7 @@ document.addEventListener("DOMContentLoaded", function () {
         siteCard.href = `/site/${site.id}`;
         siteCard.className = "site-card";
         siteCard.dataset.id = site.id;
-        siteCard.title = site.description || "";
+        siteCard.dataset.tooltip = site.description || "";
         siteCard.draggable = false;
         siteCard.target = "_blank"; // 添加新标签页打开属性
 
@@ -477,7 +481,7 @@ document.addEventListener("DOMContentLoaded", function () {
         siteCard.href = `/site/${site.id}`;
         siteCard.className = "site-card";
         siteCard.dataset.id = site.id;
-        siteCard.title = site.description || "";
+        siteCard.dataset.tooltip = site.description || "";
         siteCard.draggable = false;
         siteCard.target = "_blank";
 

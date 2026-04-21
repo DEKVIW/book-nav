@@ -222,12 +222,128 @@ body:not(.bg-none) .site-card:hover {
 }
 
 .site-card .drag-handle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(112, 73, 240, 0.12);
+  color: #7049f0;
+  opacity: 0.48;
+  z-index: 4;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
   cursor: grab;
+}
+
+.site-card .drag-handle::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.site-card .drag-handle i {
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.site-card .private-badge + .drag-handle {
+  right: 40px;
+}
+
+.site-card:hover .drag-handle {
+  opacity: 1;
+  transform: scale(1.05);
+  background: rgba(112, 73, 240, 0.18);
+  box-shadow: 0 6px 18px rgba(112, 73, 240, 0.18);
 }
 
 .site-card.dragging .drag-handle,
 .site-card .drag-handle:active {
   cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.site-card-tooltip {
+  --tooltip-arrow-offset: 50%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(33, 37, 51, 0.98), rgba(21, 24, 34, 0.98));
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.32),
+    0 8px 20px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(0, -6px, 0) scale(0.98);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+  z-index: 2000;
+}
+
+.site-card-tooltip.is-visible {
+  opacity: 1;
+}
+
+.site-card-tooltip[data-placement="bottom"] {
+  transform: translate3d(0, -4px, 0) scale(0.98);
+}
+
+.site-card-tooltip[data-placement="bottom"].is-visible {
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.site-card-tooltip[data-placement="top"] {
+  transform: translate3d(0, 4px, 0) scale(0.98);
+}
+
+.site-card-tooltip[data-placement="top"].is-visible {
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.site-card-tooltip__content {
+  position: relative;
+  z-index: 1;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.site-card-tooltip__arrow {
+  position: absolute;
+  left: var(--tooltip-arrow-offset);
+  width: 12px;
+  height: 12px;
+  background: rgba(27, 31, 43, 0.98);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.site-card-tooltip[data-placement="bottom"] .site-card-tooltip__arrow {
+  top: -7px;
+}
+
+.site-card-tooltip[data-placement="top"] .site-card-tooltip__arrow {
+  bottom: -7px;
+  transform: translateX(-50%) rotate(225deg);
 }
 
 /* 私有标记 */

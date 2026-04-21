@@ -74,8 +74,250 @@ window.disposeBootstrapTooltips = function (root = document, removeOrphans = fal
 };
 
 // 等待文档加载完成
+window.initSiteCardTooltips = function () {
+  if (window.__siteCardTooltipsInitialized) {
+    return;
+  }
+
+  window.__siteCardTooltipsInitialized = true;
+
+  const hoverMediaQuery =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(hover: hover) and (pointer: fine)")
+      : null;
+  const viewportPadding = 12;
+  const verticalGap = 14;
+  const arrowInset = 18;
+  const tooltip = document.createElement("div");
+
+  tooltip.className = "site-card-tooltip";
+  tooltip.hidden = true;
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.setAttribute("aria-hidden", "true");
+  tooltip.setAttribute("data-placement", "bottom");
+  tooltip.innerHTML =
+    '<div class="site-card-tooltip__content"></div><div class="site-card-tooltip__arrow"></div>';
+  document.body.appendChild(tooltip);
+
+  const content = tooltip.querySelector(".site-card-tooltip__content");
+  let activeTrigger = null;
+  let visibilityFrame = null;
+
+  function supportsHoverTooltips() {
+    return !hoverMediaQuery || hoverMediaQuery.matches;
+  }
+
+  function getTrigger(target) {
+    return target && target.closest
+      ? target.closest(".site-card[data-tooltip]")
+      : null;
+  }
+
+  function getTooltipText(trigger) {
+    if (!trigger) {
+      return "";
+    }
+
+    const text = trigger.getAttribute("data-tooltip") || "";
+    return text.trim();
+  }
+
+  function clearActiveTrigger() {
+    if (activeTrigger && activeTrigger.removeAttribute) {
+      activeTrigger.removeAttribute("data-tooltip-active");
+    }
+
+    activeTrigger = null;
+  }
+
+  function hideSiteCardTooltip() {
+    if (visibilityFrame) {
+      cancelAnimationFrame(visibilityFrame);
+      visibilityFrame = null;
+    }
+
+    tooltip.classList.remove("is-visible");
+    tooltip.hidden = true;
+    tooltip.setAttribute("aria-hidden", "true");
+    clearActiveTrigger();
+  }
+
+  function positionTooltip(trigger) {
+    if (!trigger || !document.body.contains(trigger)) {
+      hideSiteCardTooltip();
+      return;
+    }
+
+    const text = getTooltipText(trigger);
+    if (!text) {
+      hideSiteCardTooltip();
+      return;
+    }
+
+    content.textContent = text;
+    tooltip.style.maxWidth =
+      Math.min(320, window.innerWidth - viewportPadding * 2) + "px";
+    tooltip.setAttribute("data-placement", "bottom");
+    tooltip.classList.remove("is-visible");
+    tooltip.hidden = false;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+    const hasBottomSpace =
+      triggerRect.bottom + verticalGap + tooltipRect.height + viewportPadding <=
+      window.innerHeight;
+    const placement = hasBottomSpace ? "bottom" : "top";
+    const left = Math.min(
+      Math.max(triggerCenterX - tooltipRect.width / 2, viewportPadding),
+      window.innerWidth - tooltipRect.width - viewportPadding
+    );
+    const top =
+      placement === "bottom"
+        ? Math.min(
+            triggerRect.bottom + verticalGap,
+            window.innerHeight - tooltipRect.height - viewportPadding
+          )
+        : Math.max(
+            triggerRect.top - tooltipRect.height - verticalGap,
+            viewportPadding
+          );
+    const arrowOffset = Math.min(
+      Math.max(triggerCenterX - left, arrowInset),
+      tooltipRect.width - arrowInset
+    );
+
+    tooltip.style.left = Math.round(left) + "px";
+    tooltip.style.top = Math.round(top) + "px";
+    tooltip.style.setProperty(
+      "--tooltip-arrow-offset",
+      Math.round(arrowOffset) + "px"
+    );
+    tooltip.setAttribute("data-placement", placement);
+    tooltip.setAttribute("aria-hidden", "false");
+
+    if (visibilityFrame) {
+      cancelAnimationFrame(visibilityFrame);
+    }
+
+    visibilityFrame = requestAnimationFrame(function () {
+      tooltip.classList.add("is-visible");
+      visibilityFrame = null;
+    });
+  }
+
+  function showSiteCardTooltip(trigger, source) {
+    if (!trigger) {
+      return;
+    }
+
+    if (source === "pointer" && !supportsHoverTooltips()) {
+      return;
+    }
+
+    if (!getTooltipText(trigger)) {
+      hideSiteCardTooltip();
+      return;
+    }
+
+    if (activeTrigger !== trigger) {
+      clearActiveTrigger();
+      activeTrigger = trigger;
+      activeTrigger.setAttribute("data-tooltip-active", "true");
+    }
+
+    positionTooltip(trigger);
+  }
+
+  document.addEventListener(
+    "mouseover",
+    function (event) {
+      const trigger = getTrigger(event.target);
+      if (!trigger || trigger === activeTrigger) {
+        return;
+      }
+
+      if (event.relatedTarget && trigger.contains(event.relatedTarget)) {
+        return;
+      }
+
+      showSiteCardTooltip(trigger, "pointer");
+    },
+    true
+  );
+
+  document.addEventListener(
+    "mouseout",
+    function (event) {
+      const trigger = getTrigger(event.target);
+      if (!trigger || trigger !== activeTrigger) {
+        return;
+      }
+
+      if (event.relatedTarget && trigger.contains(event.relatedTarget)) {
+        return;
+      }
+
+      hideSiteCardTooltip();
+    },
+    true
+  );
+
+  document.addEventListener("focusin", function (event) {
+    const trigger = getTrigger(event.target);
+    if (trigger) {
+      showSiteCardTooltip(trigger, "focus");
+    }
+  });
+
+  document.addEventListener("focusout", function (event) {
+    const trigger = getTrigger(event.target);
+    if (!trigger || trigger !== activeTrigger) {
+      return;
+    }
+
+    if (event.relatedTarget && trigger.contains(event.relatedTarget)) {
+      return;
+    }
+
+    hideSiteCardTooltip();
+  });
+
+  document.addEventListener(
+    "pointerdown",
+    function () {
+      hideSiteCardTooltip();
+    },
+    true
+  );
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      hideSiteCardTooltip();
+    }
+  });
+
+  window.addEventListener("scroll", hideSiteCardTooltip, true);
+  window.addEventListener("resize", hideSiteCardTooltip);
+  window.addEventListener("blur", hideSiteCardTooltip);
+  window.addEventListener("pageshow", hideSiteCardTooltip);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      hideSiteCardTooltip();
+    }
+  });
+
+  window.hideSiteCardTooltip = hideSiteCardTooltip;
+  window.refreshSiteCardTooltip = function () {
+    if (activeTrigger) {
+      positionTooltip(activeTrigger);
+    }
+  };
+};
+
 document.addEventListener("DOMContentLoaded", function () {
   window.initBootstrapTooltips(document);
+  window.initSiteCardTooltips();
 
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {

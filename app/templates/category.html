@@ -582,7 +582,7 @@ DEBUG - Settings信息:
         data-website-id="{{ website.id }}"
         data-description="{{ website.description }}"
         data-sort="{{ website.sort_order|default(loop.index0*10) }}"
-        title="{{ website.description }}"
+        data-tooltip="{{ website.description or '' }}"
         draggable="false"
         target="_blank"
       >
@@ -928,6 +928,12 @@ DEBUG - Settings信息:
     // 暂存原始内容，用于恢复
     let originalContent = null;
 
+    function hideSiteCardTooltipIfNeeded() {
+      if (typeof window.hideSiteCardTooltip === "function") {
+        window.hideSiteCardTooltip();
+      }
+    }
+
     // 处理高亮显示的网站卡片
     {% if highlight_id %}
     const highlightId = "{{ highlight_id }}";
@@ -991,6 +997,8 @@ DEBUG - Settings信息:
         originalContent = sitesContainer.innerHTML;
       }
 
+      hideSiteCardTooltipIfNeeded();
+
       // 显示加载状态
       sitesContainer.innerHTML =
         '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-3">正在搜索...</p></div>';
@@ -1028,6 +1036,7 @@ DEBUG - Settings信息:
 
       if (data.count === 0) {
         // 没有结果
+        hideSiteCardTooltipIfNeeded();
         sitesContainer.innerHTML = `
         <div class="col-12 text-center py-5">
           <div class="text-muted">
@@ -1040,6 +1049,7 @@ DEBUG - Settings信息:
       }
 
       // 清空容器
+      hideSiteCardTooltipIfNeeded();
       sitesContainer.innerHTML = "";
 
       // 创建和添加结果卡片
@@ -1064,7 +1074,7 @@ DEBUG - Settings信息:
       card.className = "site-card";
       card.dataset.id = website.id;
       card.dataset.sort = website.sort_order;
-      card.title = website.description || "";
+      card.dataset.tooltip = website.description || "";
       card.draggable = false;
 
       // 添加私有标记
@@ -1151,6 +1161,7 @@ DEBUG - Settings信息:
     // 恢复原始内容
     function restoreOriginalContent() {
       if (originalContent) {
+        hideSiteCardTooltipIfNeeded();
         sitesContainer.innerHTML = originalContent;
         searchStatus.style.display = "none";
         searchInput.value = "";
