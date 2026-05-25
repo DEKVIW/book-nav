@@ -1,4 +1,3 @@
-let longPressTimer;
 let draggedCard = null;
 
 function preventNativeDrag(event) {
@@ -30,7 +29,6 @@ function enableDragSort(container) {
     card.dataset.dragSortBound = "true";
     disableNativeCardDrag(card);
     card.addEventListener("mousedown", handleCardMouseDown);
-    card.addEventListener("touchstart", handleTouchStart, { passive: true });
     card.addEventListener("click", suppressClickAfterRecentDrag);
 
     const dragHandle = card.querySelector(".drag-handle");
@@ -43,62 +41,6 @@ function enableDragSort(container) {
       dragHandle.addEventListener("touchend", suppressHandleInteraction, {
         passive: false,
       });
-    }
-
-    function handleTouchStart(event) {
-      const touchStartTime = Date.now();
-      let touchMoved = false;
-      const touch = event.touches[0];
-      const initialX = touch.clientX;
-      const initialY = touch.clientY;
-
-      const handleTouchMove = (moveEvent) => {
-        const moveTouch = moveEvent.touches[0];
-        const deltaX = Math.abs(moveTouch.clientX - initialX);
-        const deltaY = Math.abs(moveTouch.clientY - initialY);
-
-        if (deltaX > 10 || deltaY > 10) {
-          touchMoved = true;
-          clearTimeout(longPressTimer);
-          document.removeEventListener("touchmove", handleTouchMove);
-          document.removeEventListener("touchend", handleTouchEnd);
-          document.removeEventListener("touchcancel", cancelLongPress);
-        }
-      };
-
-      const handleTouchEnd = (endEvent) => {
-        const touchDuration = Date.now() - touchStartTime;
-
-        if (touchDuration >= 300 && !touchMoved) {
-          endEvent.preventDefault();
-          startDragging(card, container, initialX, initialY);
-        }
-
-        document.removeEventListener("touchmove", handleTouchMove);
-        document.removeEventListener("touchend", handleTouchEnd);
-        document.removeEventListener("touchcancel", cancelLongPress);
-      };
-
-      const cancelLongPress = () => {
-        clearTimeout(longPressTimer);
-        document.removeEventListener("touchmove", handleTouchMove);
-        document.removeEventListener("touchend", handleTouchEnd);
-        document.removeEventListener("touchcancel", cancelLongPress);
-      };
-
-      longPressTimer = setTimeout(() => {
-        if (!touchMoved) {
-          startDragging(card, container, initialX, initialY);
-        }
-      }, 300);
-
-      document.addEventListener("touchmove", handleTouchMove, {
-        passive: true,
-      });
-      document.addEventListener("touchend", handleTouchEnd, {
-        passive: false,
-      });
-      document.addEventListener("touchcancel", cancelLongPress);
     }
 
     function handleCardMouseDown(event) {
